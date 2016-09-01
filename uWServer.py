@@ -48,6 +48,7 @@ class MyHandler(BaseHTTPRequestHandler):
         raw_data=b''
         raw_size = self.rfile.readline(65537)        
         size = str(raw_size, 'iso-8859-1').rstrip('\r\n')
+        print("==========================================>",size)
         size = int(size,16)
         while size>0:
             chunk = self.rfile.readline(size+10)
@@ -57,6 +58,7 @@ class MyHandler(BaseHTTPRequestHandler):
             size = str(raw_size, 'iso-8859-1').rstrip('\r\n')
             size = int(size,16)
         print("full chunk",raw_data)
+        chunk = self.rfile.readline(size+10) # read the last newline after the last chunk
     def parse_request(self):
         """Parse a request (internal).
 
@@ -72,7 +74,7 @@ class MyHandler(BaseHTTPRequestHandler):
         self.request_version = version = self.default_request_version
         self.close_connection = True
         requestline = str(self.raw_requestline, 'iso-8859-1')
-        print("request",requestline)
+        #print("request",requestline)
         requestline = requestline.rstrip('\r\n')
         self.requestline = requestline
         # Examine the headers and look for a Connection directive.
@@ -92,7 +94,7 @@ class MyHandler(BaseHTTPRequestHandler):
             )
             return False
         if self.headers.get('Transfer-Encoding',"") == 'chunked':
-            print(self.headers)
+            #print(self.headers)
             self.readChunks()
         
         words = requestline.split()
@@ -144,7 +146,12 @@ class MyHandler(BaseHTTPRequestHandler):
             return False
         self.command, self.path, self.request_version = command, path, version
 
-        
+        # read message body
+        if self.command == 'POST' and self.headers.get('Content-Length') != None:
+            bodysize = int(self.headers.get('Content-Length'))
+            print("length of the body is",bodysize)
+            message = self.rfile.readline(bodysize)
+            print("message body",message)
 
         conntype = self.headers.get('Connection', "")
         if conntype.lower() == 'close':
@@ -187,7 +194,7 @@ class MyHandler(BaseHTTPRequestHandler):
                     # we drop the Content-Length header because the wiretrace JSON files are inaccurate
                     # TODO: run time option to force Content-Length to be in headers
                     length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
-                    print("content lenght === >{0}".format(length))
+                    #print("content lenght === >{0}".format(length))
                     self.send_header('Content-Length', str(length))
                     continue
         
@@ -205,7 +212,44 @@ class MyHandler(BaseHTTPRequestHandler):
             self.wfile.write(bytes(response_string, 'UTF-8'))
 
         return
-    
+    def do_HEAD(self):
+        global G_replay_dict
+        print("head request")
+        #print("ATS sent me==================>",self.headers)
+        request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
+        
+        if request_hash not in G_replay_dict:
+            self.send_response(404)
+            self.send_header('Connection', 'close')
+            self.end_headers()
+
+        else:
+            resp = G_replay_dict[request_hash]
+            headers = resp.getHeaders().split('\r\n')
+
+            # set status codes
+            status_code = self.get_response_code(headers[0])
+            self.send_response(status_code)
+
+            # set headers
+            for header in headers[1:]: # skip first one b/c it's response code
+                if header == '':
+                    continue
+                elif 'Content-Length' in header:
+                    # we drop the Content-Length header because the wiretrace JSON files are inaccurate
+                    # TODO: run time option to force Content-Length to be in headers
+                    length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
+                    print("content lenght === >{0}".format(length))
+                    self.send_header('Content-Length', str(length))
+                    continue
+        
+                header_parts = header.split(':', 1)
+                header_field = str(header_parts[0].strip())
+                header_field_val = str(header_parts[1].strip())
+                #print("{0} === >{1}".format(header_field, header_field_val))
+                self.send_header(header_field, header_field_val)
+
+            self.end_headers()
     def do_POST(self):
         
         #print("ATS sent me==================>",self.headers)
@@ -217,6 +261,8 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             print("content-md5 is",self.headers.get('Content-MD5'))
+            
+
             global G_replay_dict
             request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))              
             if request_hash not in G_replay_dict:
