@@ -47,18 +47,32 @@ class MyHandler(BaseHTTPRequestHandler):
     def readChunks(self):
         raw_data=b''
         raw_size = self.rfile.readline(65537)        
-        size = str(raw_size, 'iso-8859-1').rstrip('\r\n')
+        size = str(raw_size, 'UTF-8').rstrip('\r\n')
         print("==========================================>",size)
         size = int(size,16)
         while size>0:
-            chunk = self.rfile.readline(size+10)
+            chunk = self.rfile.read(size)
             print("cuhnk: ",chunk)
             raw_data += chunk
             raw_size = self.rfile.readline(65537)
-            size = str(raw_size, 'iso-8859-1').rstrip('\r\n')
+            size = str(raw_size, 'UTF-8').rstrip('\r\n')
             size = int(size,16)
         print("full chunk",raw_data)
-        chunk = self.rfile.readline(size+10) # read the last newline after the last chunk
+        chunk = self.rfile.readline(size) # read the extra blank newline after the last chunk
+
+    def send_header(self, keyword, value):
+        """Send a MIME header to the headers buffer."""
+        if self.request_version != 'HTTP/0.9':
+            if not hasattr(self, '_headers_buffer'):
+                self._headers_buffer = []
+            self._headers_buffer.append(
+                ("%s: %s\r\n" % (keyword, value)).encode('UTF-8', 'strict')) #original code used latin-1.. seriously?
+
+        if keyword.lower() == 'connection':
+            if value.lower() == 'close':
+                self.close_connection = True
+            elif value.lower() == 'keep-alive':
+                self.close_connection = False
     def parse_request(self):
         """Parse a request (internal).
 
@@ -73,7 +87,7 @@ class MyHandler(BaseHTTPRequestHandler):
         self.command = None  # set in case of error on the first line
         self.request_version = version = self.default_request_version
         self.close_connection = True
-        requestline = str(self.raw_requestline, 'iso-8859-1')
+        requestline = str(self.raw_requestline, 'UTF-8')
         #print("request",requestline)
         requestline = requestline.rstrip('\r\n')
         self.requestline = requestline
@@ -150,7 +164,7 @@ class MyHandler(BaseHTTPRequestHandler):
         if self.command == 'POST' and self.headers.get('Content-Length') != None:
             bodysize = int(self.headers.get('Content-Length'))
             print("length of the body is",bodysize)
-            message = self.rfile.readline(bodysize)
+            message = self.rfile.read(bodysize)
             print("message body",message)
 
         conntype = self.headers.get('Connection', "")
