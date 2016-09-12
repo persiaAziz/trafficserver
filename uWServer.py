@@ -48,16 +48,17 @@ class MyHandler(BaseHTTPRequestHandler):
         raw_data=b''
         raw_size = self.rfile.readline(65537)        
         size = str(raw_size, 'UTF-8').rstrip('\r\n')
-        print("==========================================>",size)
+        #print("==========================================>",size)
         size = int(size,16)
         while size>0:
-            chunk = self.rfile.read(size)
-            print("cuhnk: ",chunk)
+            chunk = self.rfile.read(size+2) # 2 for reading /r/n
+            #print("cuhnk: ",chunk)
             raw_data += chunk
             raw_size = self.rfile.readline(65537)
+            #print("reading bytes",raw_size)
             size = str(raw_size, 'UTF-8').rstrip('\r\n')
             size = int(size,16)
-        print("full chunk",raw_data)
+        #print("full chunk",raw_data)
         chunk = self.rfile.readline(size) # read the extra blank newline after the last chunk
 
     def send_header(self, keyword, value):
@@ -163,9 +164,9 @@ class MyHandler(BaseHTTPRequestHandler):
         # read message body
         if self.command == 'POST' and self.headers.get('Content-Length') != None:
             bodysize = int(self.headers.get('Content-Length'))
-            print("length of the body is",bodysize)
+            #print("length of the body is",bodysize)
             message = self.rfile.read(bodysize)
-            print("message body",message)
+            #print("message body",message)
 
         conntype = self.headers.get('Connection', "")
         if conntype.lower() == 'close':
@@ -228,7 +229,7 @@ class MyHandler(BaseHTTPRequestHandler):
         return
     def do_HEAD(self):
         global G_replay_dict
-        print("head request")
+        #print("head request")
         #print("ATS sent me==================>",self.headers)
         request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
         
@@ -253,7 +254,7 @@ class MyHandler(BaseHTTPRequestHandler):
                     # we drop the Content-Length header because the wiretrace JSON files are inaccurate
                     # TODO: run time option to force Content-Length to be in headers
                     length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
-                    print("content lenght === >{0}".format(length))
+                    #print("content lenght === >{0}".format(length))
                     self.send_header('Content-Length', str(length))
                     continue
         
@@ -274,7 +275,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.send_header('Connection', 'close')
                 self.end_headers()
                 return
-            print("content-md5 is",self.headers.get('Content-MD5'))
+            #print("content-md5 is",self.headers.get('Content-MD5'))
             
 
             global G_replay_dict
@@ -301,7 +302,7 @@ class MyHandler(BaseHTTPRequestHandler):
                         # we drop the Content-Length header because the wiretrace JSON files are inaccurate
                         # TODO: run time option to force Content-Length to be in headers
                         length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
-                        print("content lenght === >{0}".format(length))
+                        #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
                         continue
             
@@ -315,9 +316,9 @@ class MyHandler(BaseHTTPRequestHandler):
 
                 # set body
                 response_string = resp.getBody()
-                print("response string: ",response_string)
+                #print("response string: ",response_string)
                 if response_string != "":                    
-                    print("sending body")
+                    #print("sending body")
                     self.wfile.write(bytes(response_string, 'UTF-8'))
                 return
         except:
