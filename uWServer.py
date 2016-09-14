@@ -17,7 +17,7 @@ SERVER_PORT = 5005 # default port
 HTTP_VERSION = 'HTTP/1.1'
 G_replay_dict = {}
 
-
+count = 0
 class ThreadingServer(ThreadingMixIn, HTTPServer):
     '''This class forces the creation of a new thread on each connection'''
     pass
@@ -39,11 +39,20 @@ class MyHandler(BaseHTTPRequestHandler):
         # this could totally go wrong
         return int(header.split(' ')[1])
 
-
+    def generator(self):
+        yield 'persia'
+        yield 'aziz'
     def send_response(self, code, message=None):
         ''' Override `send_response()`'s tacking on of server and date header lines. '''
         #self.log_request(code)
         self.send_response_only(code, message)
+    def writeChunkedData(self):
+        for chunk in self.generator():
+            response_string=bytes('%X\r\n%s\r\n'%(len(chunk),chunk),'UTF-8')
+            self.wfile.write(response_string)
+        response_string=bytes('0\r\n\r\n','UTF-8')
+        self.wfile.write(response_string)
+
     def readChunks(self):
         raw_data=b''
         raw_size = self.rfile.readline(65537)        
@@ -51,15 +60,15 @@ class MyHandler(BaseHTTPRequestHandler):
         #print("==========================================>",size)
         size = int(size,16)
         while size>0:
+            #print("reading bytes",raw_size)
             chunk = self.rfile.read(size+2) # 2 for reading /r/n
             #print("cuhnk: ",chunk)
             raw_data += chunk
-            raw_size = self.rfile.readline(65537)
-            #print("reading bytes",raw_size)
+            raw_size = self.rfile.readline(65537)            
             size = str(raw_size, 'UTF-8').rstrip('\r\n')
             size = int(size,16)
         #print("full chunk",raw_data)
-        chunk = self.rfile.readline(size) # read the extra blank newline after the last chunk
+        chunk = self.rfile.readline(65537) # read the extra blank newline \r\n after the last chunk
 
     def send_header(self, keyword, value):
         """Send a MIME header to the headers buffer."""
@@ -85,17 +94,28 @@ class MyHandler(BaseHTTPRequestHandler):
         error is sent back.
 
         """
+        global count
         self.command = None  # set in case of error on the first line
         self.request_version = version = self.default_request_version
         self.close_connection = True
         requestline = str(self.raw_requestline, 'UTF-8')
         #print("request",requestline)
         requestline = requestline.rstrip('\r\n')
-        self.requestline = requestline
-        # Examine the headers and look for a Connection directive.
+        self.requestline = requestline        
+        
+        # Examine the headers and look for a Connection directive.        
         try:
             self.headers = http.client.parse_headers(self.rfile,
                                                      _class=self.MessageClass)
+            # read message body
+            if self.headers.get('Content-Length') != None:
+                bodysize = int(self.headers.get('Content-Length'))
+                #print("length of the body is",bodysize)
+                message = self.rfile.read(bodysize)
+                #print("message body",message)
+            if self.headers.get('Transfer-Encoding',"") == 'chunked':
+                #print(self.headers)
+                self.readChunks()
         except http.client.LineTooLong:
             self.send_error(
                 HTTPStatus.BAD_REQUEST,
@@ -108,9 +128,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 str(err)
             )
             return False
-        if self.headers.get('Transfer-Encoding',"") == 'chunked':
-            #print(self.headers)
-            self.readChunks()
+        
         
         words = requestline.split()
         if len(words) == 3:
@@ -153,6 +171,8 @@ class MyHandler(BaseHTTPRequestHandler):
                     "Bad HTTP/0.9 request type (%r)" % command)
                 return False
         elif not words:
+            count += 1
+            print("bla bla on 157 {0} => {1}".format(count,self.close_connection))
             return False
         else:
             self.send_error(
@@ -161,24 +181,19 @@ class MyHandler(BaseHTTPRequestHandler):
             return False
         self.command, self.path, self.request_version = command, path, version
 
-        # read message body
-        if self.command == 'POST' and self.headers.get('Content-Length') != None:
-            bodysize = int(self.headers.get('Content-Length'))
-            #print("length of the body is",bodysize)
-            message = self.rfile.read(bodysize)
-            #print("message body",message)
-
         conntype = self.headers.get('Connection', "")
         if conntype.lower() == 'close':
             self.close_connection = True
         elif (conntype.lower() == 'keep-alive' and
               self.protocol_version >= "HTTP/1.1"):
             self.close_connection = False
+           
         # Examine the headers and look for an Expect directive
         expect = self.headers.get('Expect', "")
         if (expect.lower() == "100-continue" and
                 self.protocol_version >= "HTTP/1.1" and
                 self.request_version >= "HTTP/1.1"):
+            print("blabla on 185",self.close_connection)
             if not self.handle_expect_100():
                 return False
         return True
@@ -187,7 +202,8 @@ class MyHandler(BaseHTTPRequestHandler):
         global G_replay_dict
         #print("ATS sent me==================>",self.headers)
         request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
-        
+        response_string=None
+        chunkedResponse= False
         if request_hash not in G_replay_dict:
             self.send_response(404)
             self.send_header('Connection', 'close')
@@ -211,6 +227,13 @@ class MyHandler(BaseHTTPRequestHandler):
                     length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
                     #print("content lenght === >{0}".format(length))
                     self.send_header('Content-Length', str(length))
+                    response_string=resp.getBody()
+                    continue
+                if 'Transfer-Encoding' in header:
+                    self.send_header('Transfer-Encoding','Chunked')
+                    response_string='%X\r\n%s\r\n'%(len('persia'),'persia')
+                    #print("chunked.................................")
+                    chunkedResponse= True                    
                     continue
         
                 header_parts = header.split(':', 1)
@@ -221,10 +244,10 @@ class MyHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-            # set body
-            response_string = resp.getBody()
-            #print("response string: ",response_string)
-            self.wfile.write(bytes(response_string, 'UTF-8'))
+            if (chunkedResponse):
+                self.writeChunkedData()
+            elif response_string!=None and response_string!='':
+                self.wfile.write(bytes(response_string, 'UTF-8'))
 
         return
     def do_HEAD(self):
@@ -265,9 +288,12 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.send_header(header_field, header_field_val)
 
             self.end_headers()
-    def do_POST(self):
-        
+
+    def do_POST(self):        
         #print("ATS sent me==================>",self.headers)
+        response_string=None
+        chunkedResponse= False
+        global G_replay_dict
         try:
             if self.headers.get('Content-MD5') == None:
                 print("Content-MD5 not found")
@@ -275,10 +301,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.send_header('Connection', 'close')
                 self.end_headers()
                 return
-            #print("content-md5 is",self.headers.get('Content-MD5'))
-            
-
-            global G_replay_dict
+            #print("content-md5 is",self.headers.get('Content-MD5'))         
             request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))              
             if request_hash not in G_replay_dict:
                 self.send_response(404)
@@ -290,7 +313,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 resp_headers = resp.getHeaders().split('\r\n')
                 # set status codes
                 status_code = self.get_response_code(resp_headers[0])
-                print("response code",status_code)
+                #print("response code",status_code)
                 self.send_response(status_code)
                 #print("reposen is ",resp_headers)
                 # set headers
@@ -305,7 +328,12 @@ class MyHandler(BaseHTTPRequestHandler):
                         #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
                         continue
-            
+                     if 'Transfer-Encoding' in header:
+                        self.send_header('Transfer-Encoding','Chunked')
+                        response_string='%X\r\n%s\r\n'%(len('persia'),'persia')
+                        #print("chunked.................................")
+                        chunkedResponse= True                    
+                        continue
                     header_parts = header.split(':', 1)
                     header_field = str(header_parts[0].strip())
                     header_field_val = str(header_parts[1].strip())
@@ -313,14 +341,12 @@ class MyHandler(BaseHTTPRequestHandler):
                     self.send_header(header_field, header_field_val)
 
                 self.end_headers()
-
-                # set body
-                response_string = resp.getBody()
-                #print("response string: ",response_string)
-                if response_string != "":                    
-                    #print("sending body")
-                    self.wfile.write(bytes(response_string, 'UTF-8'))
-                return
+                
+            if (chunkedResponse):
+                self.writeChunkedData()
+            elif response_string!=None and response_string!='':
+                self.wfile.write(bytes(response_string, 'UTF-8'))
+            return
         except:
             e=sys.exc_info()
             print("Error",e,e.tb_lineno,self.headers)
@@ -362,7 +388,10 @@ def main():
         server = ThreadingServer(('', server_port), MyHandler)
         server.timeout = socket_timeout or 5
         print("=== started httpserver ===")
-        server.serve_forever()
+        server_thread = threading.Thread(target=server.serve_forever())
+        server_thread.daemon=True
+        server_thread.start()
+        #server.serve_forever()
     except KeyboardInterrupt:
         print("\n=== ^C received, shutting down httpserver ===")
         server.socket.close()
