@@ -328,7 +328,7 @@ class MyHandler(BaseHTTPRequestHandler):
                         #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
                         continue
-                     if 'Transfer-Encoding' in header:
+                    if 'Transfer-Encoding' in header:
                         self.send_header('Transfer-Encoding','Chunked')
                         response_string='%X\r\n%s\r\n'%(len('persia'),'persia')
                         #print("chunked.................................")
@@ -349,7 +349,7 @@ class MyHandler(BaseHTTPRequestHandler):
             return
         except:
             e=sys.exc_info()
-            print("Error",e,e.tb_lineno,self.headers)
+            print("Error",e,self.headers)
             self.send_response(400)
             self.send_header('Connection', 'close')
             self.end_headers()
