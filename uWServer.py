@@ -46,6 +46,16 @@ class MyHandler(BaseHTTPRequestHandler):
         ''' Override `send_response()`'s tacking on of server and date header lines. '''
         #self.log_request(code)
         self.send_response_only(code, message)
+
+    def createDummyBodywithLength(numberOfbytes):
+        if numberOfbytes==0:
+            return None
+        body= 'a'
+        while numberOfbytes!=1:
+            body += 'b'
+            numberOfbytes -= 1
+        return body
+
     def writeChunkedData(self):
         for chunk in self.generator():
             response_string=bytes('%X\r\n%s\r\n'%(len(chunk),chunk),'UTF-8')
@@ -274,11 +284,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 if header == '':
                     continue
                 elif 'Content-Length' in header:
-                    # we drop the Content-Length header because the wiretrace JSON files are inaccurate
-                    # TODO: run time option to force Content-Length to be in headers
-                    length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
-                    #print("content lenght === >{0}".format(length))
-                    self.send_header('Content-Length', str(length))
+                    self.send_header('Content-Length', '0')
                     continue
         
                 header_parts = header.split(':', 1)
@@ -327,6 +333,7 @@ class MyHandler(BaseHTTPRequestHandler):
                         length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
                         #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
+                        response_string=resp.getBody()
                         continue
                     if 'Transfer-Encoding' in header:
                         self.send_header('Transfer-Encoding','Chunked')
