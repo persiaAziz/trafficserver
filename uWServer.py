@@ -6,9 +6,24 @@ import sys
 import json
 import os
 import threading
+from ipaddress import ip_address
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn, ForkingMixIn
 from http import HTTPStatus
+import argparse
+
+__version__="1.0.Beta"
+
+# hack to deal with sessionvalidation until we fix up the 
+# packaing logic
+sys.path.append(
+    os.path.normpath(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            '..'
+            )
+        )
+    )
 
 import sessionvalidation.sessionvalidation as sv
 
@@ -370,26 +385,51 @@ def populate_global_replay_dictionary(sessions):
             G_replay_dict[txn._uuid] = txn.getResponse()
 
 
+def _path(exists, arg ):
+    path = os.path.abspath(arg)
+    if not os.path.exists(path) and exists:
+        msg = '"{0}" is not a valid path'.format(path)
+        raise argparse.ArgumentTypeError(msg)
+    return path
+
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: ./uWs.py replay_files_dir [server_port] [socket_timeout]")
-        sys.exit(1)
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--data-dir","-d",
+                        type=lambda x: self._path(True,x),
+                        required=True,
+                        help="Directory with data file"
+                        )
+
+    parser.add_argument("--address","-a", 
+                        type=ip_address, 
+                        default="127.0.0.1",                        
+                        help="Address to host on.")
+
+    parser.add_argument("--port","-p",
+                        type=int,
+                        default=SERVER_PORT,                        
+                        help="Port to use")
+
+    parser.add_argument("--timeout","-t", 
+                        type=float,
+                        default=None,                        
+                        help="socket time out in seconds")                        
+
+    parser.add_argument('-V','--version', action='version', version='%(prog)s {0}'.format(__version__))
+
+    args=parser.parse_args()
 
     # set up global dictionary of {uuid (string): response (Response object)}
-    s = sv.SessionValidator(sys.argv[1])
+    s = sv.SessionValidator(args.data_dir)
     populate_global_replay_dictionary(s.getSessionIter())
     print("Dropped {0} sessions for being malformed".format(len(s.getBadSessionList())))
 
     # start server
     try:
-        server_port = SERVER_PORT
-        socket_timeout = None
-
-        if len(sys.argv) >= 3:
-            server_port = int(sys.argv[2])
-
-        if len(sys.argv) >= 4:
-            socket_timeout = int(sys.argv[3])
+        server_port = args.port
+        socket_timeout = args.timeout
 
         MyHandler.protocol_version = HTTP_VERSION
         server = ThreadingServer(('', server_port), MyHandler)
