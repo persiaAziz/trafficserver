@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn, ForkingMixIn
 from http import HTTPStatus
 import argparse
-
+test_mode_enabled = True
 __version__="1.0.Beta"
 
 # hack to deal with sessionvalidation until we fix up the 
@@ -50,6 +50,17 @@ class ForkingServer(ForkingMixIn, HTTPServer):
 # See the source code (https://hg.python.org/cpython/file/3.5/Lib/http/server.py) if you want to see where all these
 # variables are coming from
 class MyHandler(BaseHTTPRequestHandler):
+    def parseRequestline(requestline):
+        testName=None
+        
+        return testName
+    def testMode(self,requestline):
+        print(requestline)
+        self.send_response(200)
+        self.send_header('Connection', 'close')
+        self.end_headers()
+
+        
     def get_response_code(self, header):
         # this could totally go wrong
         return int(header.split(' ')[1])
@@ -119,7 +130,9 @@ class MyHandler(BaseHTTPRequestHandler):
         error is sent back.
 
         """
-        global count
+        
+        global count, test_mode_enabled
+        
         self.command = None  # set in case of error on the first line
         self.request_version = version = self.default_request_version
         self.close_connection = True
@@ -212,7 +225,7 @@ class MyHandler(BaseHTTPRequestHandler):
         elif (conntype.lower() == 'keep-alive' and
               self.protocol_version >= "HTTP/1.1"):
             self.close_connection = False
-           
+         
         # Examine the headers and look for an Expect directive
         expect = self.headers.get('Expect', "")
         if (expect.lower() == "100-continue" and
@@ -224,6 +237,9 @@ class MyHandler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
+        if test_mode_enabled:
+            self.testMode(self.requestline)
+            return True
         global G_replay_dict
         #print("ATS sent me==================>",self.headers)
         request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
@@ -419,6 +435,11 @@ def main():
 
     parser.add_argument('-V','--version', action='version', version='%(prog)s {0}'.format(__version__))
 
+    parser.add_argument("--mode","-m",
+                        type=str,
+                        default="test",                        
+                        help="Mode of operation")
+
     args=parser.parse_args()
 
     # set up global dictionary of {uuid (string): response (Response object)}
@@ -430,7 +451,7 @@ def main():
     try:
         server_port = args.port
         socket_timeout = args.timeout
-
+        test_mode_enabled = args.mode=="test"
         MyHandler.protocol_version = HTTP_VERSION
         server = ThreadingServer(('', server_port), MyHandler)
         server.timeout = socket_timeout or 5
