@@ -52,9 +52,11 @@ class ForkingServer(ForkingMixIn, HTTPServer):
 class MyHandler(BaseHTTPRequestHandler):
     def getTestName(self,requestline):
         key=None
-        keys=requestline.split("/")
+        keys=requestline.split(" ")
+        #print(keys)
         if keys:
-            key=keys[-1]
+            rkey=keys[1]
+        key=rkey.split("/")[-1]
         return key
 
     def parseRequestline(self,requestline):
@@ -427,6 +429,21 @@ def _path(exists, arg ):
         raise argparse.ArgumentTypeError(msg)
     return path
 
+def _bool(arg):
+        
+        opt_true_values = set(['y', 'yes', 'true', 't', '1', 'on' , 'all'])
+        opt_false_values = set(['n', 'no', 'false', 'f', '0', 'off', 'none'])
+
+        tmp = arg.lower()
+        if tmp in opt_true_values:
+            return True
+        elif tmp in opt_false_values:
+            return False
+        else:
+            msg = 'Invalid value Boolean value : "{0}"\n Valid options are {0}'.format(arg,
+                    opt_true_values | opt_false_values)
+            raise argparse.ArgumentTypeError(msg)
+
 
 def main():
 
@@ -438,10 +455,11 @@ def main():
                         help="Directory with data file"
                         )
 
-    parser.add_argument("--address","-a", 
-                        type=ip_address, 
-                        default="127.0.0.1",                        
-                        help="Address to host on.")
+    parser.add_argument("--public","-P", 
+                        type=_bool, 
+                        default=False,                        
+                        help="Bind server to public IP 0.0.0.0 vs private IP of 127.0.0.1"
+                        )
 
     parser.add_argument("--port","-p",
                         type=int,
