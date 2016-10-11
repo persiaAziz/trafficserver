@@ -50,12 +50,21 @@ class ForkingServer(ForkingMixIn, HTTPServer):
 # See the source code (https://hg.python.org/cpython/file/3.5/Lib/http/server.py) if you want to see where all these
 # variables are coming from
 class MyHandler(BaseHTTPRequestHandler):
-    def parseRequestline(requestline):
-        testName=None
-        
+    def getTestName(self,requestline):
+        key=None
+        keys=requestline.split("/")
+        if keys:
+            key=keys[-1]
+        return key
+
+    def parseRequestline(self,requestline):
+        testName=None        
         return testName
+
     def testMode(self,requestline):
         print(requestline)
+        key=self.parseRequestline(requestline)
+        
         self.send_response(200)
         self.send_header('Connection', 'close')
         self.end_headers()
@@ -237,16 +246,17 @@ class MyHandler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        if test_mode_enabled:
-            self.testMode(self.requestline)
-            return True
         global G_replay_dict
         #print("ATS sent me==================>",self.headers)
-        request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
+        if test_mode_enabled:
+            request_hash = self.getTestName(self.requestline)
+        else:
+            request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
         response_string=None
         chunkedResponse= False
         if request_hash not in G_replay_dict:
             self.send_response(404)
+            self.send_header('Server','blablabla')
             self.send_header('Connection', 'close')
             self.end_headers()
 
@@ -293,9 +303,11 @@ class MyHandler(BaseHTTPRequestHandler):
         return
     def do_HEAD(self):
         global G_replay_dict
-        #print("head request")
         #print("ATS sent me==================>",self.headers)
-        request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
+        if test_mode_enabled:
+            request_hash = self.getTestName(self.requestline)
+        else:
+            request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
         
         if request_hash not in G_replay_dict:
             self.send_response(404)
@@ -331,6 +343,11 @@ class MyHandler(BaseHTTPRequestHandler):
         response_string=None
         chunkedResponse= False
         global G_replay_dict
+        #print("ATS sent me==================>",self.headers)
+        if test_mode_enabled:
+            request_hash = self.getTestName(self.requestline)
+        else:
+            request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
         try:
             if self.headers.get('Content-MD5') == None:
                 print("Content-MD5 not found")
@@ -338,8 +355,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.send_header('Connection', 'close')
                 self.end_headers()
                 return
-            #print("content-md5 is",self.headers.get('Content-MD5'))         
-            request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))              
+
             if request_hash not in G_replay_dict:
                 self.send_response(404)
                 self.send_header('Connection', 'close')
@@ -400,13 +416,17 @@ def populate_global_replay_dictionary(sessions):
         for txn in session.getTransactionIter():
             G_replay_dict[txn._uuid] = txn.getResponse()
 
-
+#tests will add responses to the dictionary where key is the testname
+def addResponseHeader(key,response_header):
+    G_replay_dict[key] = response_header
+    
 def _path(exists, arg ):
     path = os.path.abspath(arg)
     if not os.path.exists(path) and exists:
         msg = '"{0}" is not a valid path'.format(path)
         raise argparse.ArgumentTypeError(msg)
     return path
+
 
 def main():
 
@@ -446,7 +466,7 @@ def main():
     s = sv.SessionValidator(args.data_dir)
     populate_global_replay_dictionary(s.getSessionIter())
     print("Dropped {0} sessions for being malformed".format(len(s.getBadSessionList())))
-
+    
     # start server
     try:
         server_port = args.port
