@@ -1,3 +1,5 @@
+#!/bin/env python3
+
 import string
 import http.client
 import cgi
@@ -56,7 +58,11 @@ class MyHandler(BaseHTTPRequestHandler):
         #print(keys)
         if keys:
             rkey=keys[1]
-        key=rkey.split("/")[-1]
+        key=rkey.split("/",1)[1]
+        if key+"/" in G_replay_dict:
+            key = key+"/"
+        elif len(key) > 1 and key[:-1] in G_replay_dict:
+            key = key[:-1]
         return key
 
     def parseRequestline(self,requestline):
@@ -248,12 +254,13 @@ class MyHandler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        global G_replay_dict
+        global G_replay_dict, test_mode_enabled
         #print("ATS sent me==================>",self.headers)
         if test_mode_enabled:
             request_hash = self.getTestName(self.requestline)
         else:
             request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
+        #print("key:",request_hash)
         response_string=None
         chunkedResponse= False
         if request_hash not in G_replay_dict:
@@ -304,7 +311,7 @@ class MyHandler(BaseHTTPRequestHandler):
 
         return
     def do_HEAD(self):
-        global G_replay_dict
+        global G_replay_dict, test_mode_enabled
         #print("ATS sent me==================>",self.headers)
         if test_mode_enabled:
             request_hash = self.getTestName(self.requestline)
@@ -344,7 +351,7 @@ class MyHandler(BaseHTTPRequestHandler):
         #print("ATS sent me==================>",self.headers)
         response_string=None
         chunkedResponse= False
-        global G_replay_dict
+        global G_replay_dict, test_mode_enabled
         #print("ATS sent me==================>",self.headers)
         if test_mode_enabled:
             request_hash = self.getTestName(self.requestline)
@@ -413,11 +420,12 @@ class MyHandler(BaseHTTPRequestHandler):
 def populate_global_replay_dictionary(sessions):
     ''' Populates the global dictionary of {uuid (string): reponse (Response object)} '''
     global G_replay_dict
-    print("size",len(G_replay_dict))
     for session in sessions:
         for txn in session.getTransactionIter():
             G_replay_dict[txn._uuid] = txn.getResponse()
-
+    
+    print("size",len(G_replay_dict))
+    
 #tests will add responses to the dictionary where key is the testname
 def addResponseHeader(key,response_header):
     G_replay_dict[key] = response_header
@@ -446,7 +454,7 @@ def _bool(arg):
 
 
 def main():
-
+    global test_mode_enabled
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--data-dir","-d",
@@ -490,6 +498,7 @@ def main():
         server_port = args.port
         socket_timeout = args.timeout
         test_mode_enabled = args.mode=="test"
+        
         MyHandler.protocol_version = HTTP_VERSION
         server = ThreadingServer(('', server_port), MyHandler)
         server.timeout = socket_timeout or 5
