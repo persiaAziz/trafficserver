@@ -282,6 +282,8 @@ class MyHandler(BaseHTTPRequestHandler):
                 if header == '':
                     continue
                 elif 'Content-Length' in header:
+                    if 'Access-Control' in header: # skipping Access-Control-Allow-Credentials, Access-Control-Allow-Origin, Content-Length
+                        continue
                     # we drop the Content-Length header because the wiretrace JSON files are inaccurate
                     # TODO: run time option to force Content-Length to be in headers
                     length = header.split(':')[1]
