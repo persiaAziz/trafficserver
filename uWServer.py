@@ -293,7 +293,7 @@ class MyHandler(BaseHTTPRequestHandler):
                     #print("content lenght === >{0}".format(length))
                     self.send_header('Content-Length', str(length))
                     #response_string=resp.getBody()
-                    response_string = self.createDummyBodywithLength(length)
+                    response_string = self.createDummyBodywithLength(int(length))
                     continue
                 if 'Transfer-Encoding' in header:
                     self.send_header('Transfer-Encoding','Chunked')
