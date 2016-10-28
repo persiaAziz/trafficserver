@@ -297,7 +297,7 @@ class MyHandler(BaseHTTPRequestHandler):
                     continue
                 if 'Transfer-Encoding' in header:
                     self.send_header('Transfer-Encoding','Chunked')
-                    response_string='%X\r\n%s\r\n'%(len('persia'),'persia')
+                    response_string='%X\r\n%s\r\n'%(len('ats'),'ats')
                     #print("chunked.................................")
                     chunkedResponse= True                    
                     continue
@@ -390,12 +390,18 @@ class MyHandler(BaseHTTPRequestHandler):
                     if header == '':
                         continue
                     elif 'Content-Length' in header:
+                        if 'Access-Control' in header: # skipping Access-Control-Allow-Credentials, Access-Control-Allow-Origin, Content-Length
+                            continue
                         # we drop the Content-Length header because the wiretrace JSON files are inaccurate
                         # TODO: run time option to force Content-Length to be in headers
-                        length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
+                        lengthSTR = header.split(':')[1]
+                        length = lengthSTR.strip(' ')
+                        print(length)
+                        #length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
                         #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
-                        response_string=resp.getBody()
+                        #response_string=resp.getBody()
+                        response_string = self.createDummyBodywithLength(int(length))
                         continue
                     if 'Transfer-Encoding' in header:
                         self.send_header('Transfer-Encoding','Chunked')
