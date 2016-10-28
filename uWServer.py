@@ -284,6 +284,8 @@ class MyHandler(BaseHTTPRequestHandler):
                 elif 'Content-Length' in header:
                     # we drop the Content-Length header because the wiretrace JSON files are inaccurate
                     # TODO: run time option to force Content-Length to be in headers
+                    length = header.split(':')[1]
+                    print(length)
                     length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
                     #print("content lenght === >{0}".format(length))
                     self.send_header('Content-Length', str(length))
