@@ -288,7 +288,7 @@ class MyHandler(BaseHTTPRequestHandler):
                     # TODO: run time option to force Content-Length to be in headers
                     lengthSTR = header.split(':')[1]
                     length = lengthSTR.strip(' ')
-                    print(length)
+                    #print(length)
                     #length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
                     #print("content lenght === >{0}".format(length))
                     self.send_header('Content-Length', str(length))
@@ -396,7 +396,7 @@ class MyHandler(BaseHTTPRequestHandler):
                         # TODO: run time option to force Content-Length to be in headers
                         lengthSTR = header.split(':')[1]
                         length = lengthSTR.strip(' ')
-                        print(length)
+                        #print(length)
                         #length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
                         #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
