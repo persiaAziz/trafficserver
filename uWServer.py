@@ -90,7 +90,7 @@ class MyHandler(BaseHTTPRequestHandler):
         #self.log_request(code)
         self.send_response_only(code, message)
 
-    def createDummyBodywithLength(numberOfbytes):
+    def createDummyBodywithLength(self,numberOfbytes):
         if numberOfbytes==0:
             return None
         body= 'a'
