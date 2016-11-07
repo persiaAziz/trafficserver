@@ -10,9 +10,12 @@ import os
 import threading
 from ipaddress import ip_address
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn, ForkingMixIn
+from socketserver import ThreadingMixIn, ForkingMixIn, BaseServer
 from http import HTTPStatus
 import argparse
+import ssl
+import socket
+
 test_mode_enabled = True
 __version__="1.0.Beta"
 
@@ -43,6 +46,20 @@ class ForkingServer(ForkingMixIn, HTTPServer):
     '''This class forces the creation of a new process on each connection'''
     pass
 
+class SSLServer(ThreadingMixIn, HTTPServer):
+    	def __init__(self, server_address, HandlerClass, options):
+            BaseServer.__init__(self, server_address, HandlerClass)
+
+            self.options = options
+
+            self.daemon_threads = True
+            self.protocol_version = 'HTTP/1.1'
+
+            self.socket = ssl.wrap_socket(socket.socket(self.address_family, self.socket_type),
+                    keyfile=self.options.key, certfile=self.options.cert, server_side=True)
+
+            self.server_bind()
+            self.server_activate()
 
 # Warning: if you can't tell already, it's pretty hacky
 #
@@ -497,9 +514,13 @@ def main():
                         type=str,
                         default="test",                        
                         help="Mode of operation")
+    parser.add_argument("--connection","-c",
+                        type=str,
+                        default="nonSSL",                        
+                        help="use SSL")
 
     args=parser.parse_args()
-
+    options = args
     # set up global dictionary of {uuid (string): response (Response object)}
     s = sv.SessionValidator(args.data_dir)
     populate_global_replay_dictionary(s.getSessionIter())
@@ -512,16 +533,41 @@ def main():
         test_mode_enabled = args.mode=="test"
         
         MyHandler.protocol_version = HTTP_VERSION
-        server = ThreadingServer(('', server_port), MyHandler)
-        server.timeout = socket_timeout or 5
-        print("=== started httpserver ===")
+        
+        if options.connection == 'ssl':
+            options.key = '/home/persia/server.pem'
+            options.cert = '/home/persia/server.crt'
+            server = SSLServer(('',4443), MyHandler, options)
+        else:
+            server = ThreadingServer(('', server_port), MyHandler)
+        server.timeout = 5
+        print("started server")
         server_thread = threading.Thread(target=server.serve_forever())
         server_thread.daemon=True
         server_thread.start()
+
+        #s_serverThread.daemon = True
+        #s_serverThread.start()
+        #threads.append(s_serverThread)
+
+        
+        #server.timeout = socket_timeout or 5
+        #print("=== started httpserver ===")
+        #server_thread = threading.Thread(target=server.serve_forever())
+        #server_thread.daemon=True
+        #server_thread.start()
+        #threads.append(server_thread)
         #server.serve_forever()
+        
+        #for t in threads:
+        #    t.start()
+
+        #for t in threads:
+        #    t.join()
     except KeyboardInterrupt:
         print("\n=== ^C received, shutting down httpserver ===")
         server.socket.close()
+        #s_server.socket.close()
         sys.exit(0)
 
 
