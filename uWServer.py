@@ -307,8 +307,11 @@ class MyHandler(BaseHTTPRequestHandler):
                             continue
                         lengthSTR = header.split(':')[1]
                         length = lengthSTR.strip(' ')
-                        self.send_header('Content-Length', str(length))
-                        #response_string=resp.getBody()
+                        if test_mode_enabled: # the length of the body is given priority in test mode rather than the value in Content-Length. But in replay mode Content-Length gets the priority
+                            if not (resp and resp.getBody()): # Don't attach content-length yet if body is present in the response specified by tester
+                                self.send_header('Content-Length', str(length))
+                        else:
+                            self.send_header('Content-Length', str(length))
                         response_string = self.createDummyBodywithLength(int(length))
                         continue
                     if 'Transfer-Encoding' in header:
@@ -425,7 +428,11 @@ class MyHandler(BaseHTTPRequestHandler):
                         
                         lengthSTR = header.split(':')[1]
                         length = lengthSTR.strip(' ')
-                        self.send_header('Content-Length', str(length))
+                        if test_mode_enabled: # the length of the body is given priority in test mode rather than the value in Content-Length. But in replay mode Content-Length gets the priority
+                            if not (resp and resp.getBody()): # Don't attach content-length yet if body is present in the response specified by tester
+                                self.send_header('Content-Length', str(length))
+                        else:
+                            self.send_header('Content-Length', str(length))
                         response_string = self.createDummyBodywithLength(int(length))
                         continue
                     if 'Transfer-Encoding' in header:
