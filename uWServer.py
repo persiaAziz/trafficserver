@@ -100,8 +100,8 @@ class MyHandler(BaseHTTPRequestHandler):
         return int(header.split(' ')[1])
 
     def generator(self):
-        yield 'persia'
-        yield 'aziz'
+        yield 'microserver'
+        yield 'yahoo'
     def send_response(self, code, message=None):
         ''' Override `send_response()`'s tacking on of server and date header lines. '''
         #self.log_request(code)
@@ -272,70 +272,81 @@ class MyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         global G_replay_dict, test_mode_enabled
-        #print("ATS sent me==================>",self.headers)
         if test_mode_enabled:
             request_hash = self.getTestName(self.requestline)
         else:
             request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
         #print("key:",request_hash)
-        response_string=None
-        chunkedResponse= False
-        if request_hash not in G_replay_dict:
-            self.send_response(404)
-            self.send_header('Server','blablabla')
+        try:
+            response_string=None
+            chunkedResponse= False
+            if request_hash not in G_replay_dict:
+                self.send_response(404)
+                self.send_header('Server','blablabla')
+                self.send_header('Connection', 'close')
+                self.end_headers()
+
+            else:
+                resp = G_replay_dict[request_hash]
+                headers = resp.getHeaders().split('\r\n')
+
+                # set status codes
+                status_code = self.get_response_code(headers[0])
+                self.send_response(status_code)
+
+                # set headers
+                for header in headers[1:]: # skip first one b/c it's response code
+                    if header == '':
+                        continue
+                    elif 'Content-Length' in header:
+                        if 'Access-Control' in header: # skipping Access-Control-Allow-Credentials, Access-Control-Allow-Origin, Content-Length
+                            header_parts = header.split(':', 1)
+                            header_field = str(header_parts[0].strip())
+                            header_field_val = str(header_parts[1].strip())
+                            self.send_header(header_field, header_field_val)
+                            continue
+                        lengthSTR = header.split(':')[1]
+                        length = lengthSTR.strip(' ')
+                        self.send_header('Content-Length', str(length))
+                        #response_string=resp.getBody()
+                        response_string = self.createDummyBodywithLength(int(length))
+                        continue
+                    if 'Transfer-Encoding' in header:
+                        self.send_header('Transfer-Encoding','Chunked')
+                        response_string='%X\r\n%s\r\n'%(len('ats'),'ats')
+                        chunkedResponse= True                    
+                        continue
+            
+                    header_parts = header.split(':', 1)
+                    header_field = str(header_parts[0].strip())
+                    header_field_val = str(header_parts[1].strip())
+                    #print("{0} === >{1}".format(header_field, header_field_val))
+                    self.send_header(header_field, header_field_val)
+                #End for
+                if test_mode_enabled:
+                    if resp and resp.getBody():
+                        length = len(bytes(resp.getBody(),'UTF-8'))
+                        response_string=resp.getBody()
+                        self.send_header('Content-Length', str(length))
+                self.end_headers()
+                
+                
+                if (chunkedResponse):
+                    self.writeChunkedData()
+                elif response_string!=None and response_string!='':
+                    self.wfile.write(bytes(response_string, 'UTF-8'))
+            return
+        except:
+            e=sys.exc_info()
+            print("Error",e,self.headers)
+            self.send_response(400)
             self.send_header('Connection', 'close')
             self.end_headers()
+       
 
-        else:
-            resp = G_replay_dict[request_hash]
-            headers = resp.getHeaders().split('\r\n')
-
-            # set status codes
-            status_code = self.get_response_code(headers[0])
-            self.send_response(status_code)
-
-            # set headers
-            for header in headers[1:]: # skip first one b/c it's response code
-                if header == '':
-                    continue
-                elif 'Content-Length' in header:
-                    if 'Access-Control' in header: # skipping Access-Control-Allow-Credentials, Access-Control-Allow-Origin, Content-Length
-                        continue
-                    # we drop the Content-Length header because the wiretrace JSON files are inaccurate
-                    # TODO: run time option to force Content-Length to be in headers
-                    lengthSTR = header.split(':')[1]
-                    length = lengthSTR.strip(' ')
-                    #print(length)
-                    #length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
-                    #print("content lenght === >{0}".format(length))
-                    self.send_header('Content-Length', str(length))
-                    #response_string=resp.getBody()
-                    response_string = self.createDummyBodywithLength(int(length))
-                    continue
-                if 'Transfer-Encoding' in header:
-                    self.send_header('Transfer-Encoding','Chunked')
-                    response_string='%X\r\n%s\r\n'%(len('ats'),'ats')
-                    #print("chunked.................................")
-                    chunkedResponse= True                    
-                    continue
         
-                header_parts = header.split(':', 1)
-                header_field = str(header_parts[0].strip())
-                header_field_val = str(header_parts[1].strip())
-                #print("{0} === >{1}".format(header_field, header_field_val))
-                self.send_header(header_field, header_field_val)
-
-            self.end_headers()
-
-            if (chunkedResponse):
-                self.writeChunkedData()
-            elif response_string!=None and response_string!='':
-                self.wfile.write(bytes(response_string, 'UTF-8'))
-
-        return
     def do_HEAD(self):
         global G_replay_dict, test_mode_enabled
-        #print("ATS sent me==================>",self.headers)
         if test_mode_enabled:
             request_hash = self.getTestName(self.requestline)
         else:
@@ -370,12 +381,10 @@ class MyHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-    def do_POST(self):        
-        #print("ATS sent me==================>",self.headers)
+    def do_POST(self):
         response_string=None
         chunkedResponse= False
         global G_replay_dict, test_mode_enabled
-        #print("ATS sent me==================>",self.headers)
         if test_mode_enabled:
             request_hash = self.getTestName(self.requestline)
         else:
@@ -392,7 +401,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.send_header('Connection', 'close')
                 self.end_headers()
-
+                resp = None
             else:
                 resp = G_replay_dict[request_hash]
                 resp_headers = resp.getHeaders().split('\r\n')
@@ -408,32 +417,36 @@ class MyHandler(BaseHTTPRequestHandler):
                         continue
                     elif 'Content-Length' in header:
                         if 'Access-Control' in header: # skipping Access-Control-Allow-Credentials, Access-Control-Allow-Origin, Content-Length
+                            header_parts = header.split(':', 1)
+                            header_field = str(header_parts[0].strip())
+                            header_field_val = str(header_parts[1].strip())
+                            self.send_header(header_field, header_field_val)
                             continue
-                        # we drop the Content-Length header because the wiretrace JSON files are inaccurate
-                        # TODO: run time option to force Content-Length to be in headers
+                        
                         lengthSTR = header.split(':')[1]
                         length = lengthSTR.strip(' ')
-                        #print(length)
-                        #length = len(bytes(resp.getBody(),'UTF-8')) if resp.getBody() else 0
-                        #print("content lenght === >{0}".format(length))
                         self.send_header('Content-Length', str(length))
-                        #response_string=resp.getBody()
                         response_string = self.createDummyBodywithLength(int(length))
                         continue
                     if 'Transfer-Encoding' in header:
                         self.send_header('Transfer-Encoding','Chunked')
-                        response_string='%X\r\n%s\r\n'%(len('persia'),'persia')
-                        #print("chunked.................................")
+                        response_string='%X\r\n%s\r\n'%(len('microserver'),'microserver')
                         chunkedResponse= True                    
                         continue
+                    
                     header_parts = header.split(':', 1)
                     header_field = str(header_parts[0].strip())
                     header_field_val = str(header_parts[1].strip())
                     #print("{0} === >{1}".format(header_field, header_field_val))
                     self.send_header(header_field, header_field_val)
-
+                # End for loop
+                if test_mode_enabled:
+                    if resp and resp.getBody():
+                        length = len(bytes(resp.getBody(),'UTF-8'))
+                        response_string=resp.getBody()
+                        self.send_header('Content-Length', str(length))    
                 self.end_headers()
-                
+            
             if (chunkedResponse):
                 self.writeChunkedData()
             elif response_string!=None and response_string!='':
