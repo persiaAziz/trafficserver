@@ -49,14 +49,16 @@ class ForkingServer(ForkingMixIn, HTTPServer):
 class SSLServer(ThreadingMixIn, HTTPServer):
     	def __init__(self, server_address, HandlerClass, options):
             BaseServer.__init__(self, server_address, HandlerClass)
-
+            pwd = os.path.dirname(os.path.realpath(__file__))
+            keys = os.path.join(pwd,options.key)
+            certs = os.path.join(pwd,options.cert)
             self.options = options
 
             self.daemon_threads = True
             self.protocol_version = 'HTTP/1.1'
 
             self.socket = ssl.wrap_socket(socket.socket(self.address_family, self.socket_type),
-                    keyfile=self.options.key, certfile=self.options.cert, server_side=True)
+                    keyfile=keys, certfile=certs, server_side=True)
 
             self.server_bind()
             self.server_activate()
@@ -538,6 +540,14 @@ def main():
                         type=str,
                         default="nonSSL",                        
                         help="use SSL")
+    parser.add_argument("--key","-k",
+                        type=str,
+                        default="ssl/server.pem",                        
+                        help="key for ssl connnection")
+    parser.add_argument("--cert","-cert",
+                        type=str,
+                        default="ssl/server.crt",                        
+                        help="certificate")
 
     args=parser.parse_args()
     options = args
@@ -552,11 +562,8 @@ def main():
         socket_timeout = args.timeout
         test_mode_enabled = args.mode=="test"
         
-        MyHandler.protocol_version = HTTP_VERSION
-        
+        MyHandler.protocol_version = HTTP_VERSION        
         if options.connection == 'ssl':
-            options.key = '/home/persia/server.pem'
-            options.cert = '/home/persia/server.crt'
             server = SSLServer(('',4443), MyHandler, options)
         else:
             server = ThreadingServer(('', server_port), MyHandler)
