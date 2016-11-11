@@ -56,8 +56,11 @@ class SSLServer(ThreadingMixIn, HTTPServer):
 
             self.daemon_threads = True
             self.protocol_version = 'HTTP/1.1'
-
-            self.socket = ssl.wrap_socket(socket.socket(self.address_family, self.socket_type),
+            if options.clientverify:
+            	self.socket = ssl.wrap_socket(socket.socket(self.address_family, self.socket_type),
+                    keyfile=keys, certfile=certs, server_side=True, cert_reqs=ssl.CERT_REQUIRED, ca_certs='/etc/ssl/certs/ca-certificates.crt')
+            else:
+                self.socket = ssl.wrap_socket(socket.socket(self.address_family, self.socket_type),
                     keyfile=keys, certfile=certs, server_side=True)
 
             self.server_bind()
@@ -548,6 +551,10 @@ def main():
                         type=str,
                         default="ssl/server.crt",                        
                         help="certificate")
+    parser.add_argument("--clientverify","-cverify",
+                        type=bool,
+                        default=False,
+                        help="verify client cert")
 
     args=parser.parse_args()
     options = args
