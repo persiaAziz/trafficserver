@@ -74,6 +74,18 @@ class SSLServer(ThreadingMixIn, HTTPServer):
 # See the source code (https://hg.python.org/cpython/file/3.5/Lib/http/server.py) if you want to see where all these
 # variables are coming from
 class MyHandler(BaseHTTPRequestHandler):
+    def handleExpect100Continue(self,contentLength,chunked=False):
+        print("....expect",contentLength)
+        self.wfile.write(bytes('HTTP/1.1 100 Continue\r\n\r\n','UTF-8'))
+        #self.send_response(HTTPStatus.CONTINUE)
+        #self.send_header('Server','blablabla')
+        #self.send_header('Connection', 'keep-alive')
+        #self.end_headers()
+        if(not chunked):
+            message = self.rfile.read(contentLength)
+        else:
+            readChunks()
+
     def getTestName(self,requestline):
         key=None
         keys=requestline.split(" ")
@@ -184,13 +196,26 @@ class MyHandler(BaseHTTPRequestHandler):
         try:
             self.headers = http.client.parse_headers(self.rfile,
                                                      _class=self.MessageClass)
+            # Examine the headers and look for an Expect directive
+            expect = self.headers.get('Expect', "")
+            if (expect.lower() == "100-continue"):
+                
+                if self.headers.get('Content-Length') != None:
+                    bodysize = int(self.headers.get('Content-Length'))
+                    self.handleExpect100Continue(bodysize)
+                elif self.headers.get('Transfer-Encoding',"") == 'chunked':
+                    self.handleExpect100Continue(0,True)
+                print("expect 100 block on uWserver.py:205",self.close_connection)
+                #if not self.handle_expect_100():
+                #    return False
+
             # read message body
-            if self.headers.get('Content-Length') != None:
+            elif self.headers.get('Content-Length') != None:
                 bodysize = int(self.headers.get('Content-Length'))
                 #print("length of the body is",bodysize)
                 message = self.rfile.read(bodysize)
                 #print("message body",message)
-            if self.headers.get('Transfer-Encoding',"") == 'chunked':
+            elif self.headers.get('Transfer-Encoding',"") == 'chunked':
                 #print(self.headers)
                 self.readChunks()
         except http.client.LineTooLong:
@@ -265,14 +290,7 @@ class MyHandler(BaseHTTPRequestHandler):
               self.protocol_version >= "HTTP/1.1"):
             self.close_connection = False
          
-        # Examine the headers and look for an Expect directive
-        expect = self.headers.get('Expect', "")
-        if (expect.lower() == "100-continue" and
-                self.protocol_version >= "HTTP/1.1" and
-                self.request_version >= "HTTP/1.1"):
-            print("blabla on 185",self.close_connection)
-            if not self.handle_expect_100():
-                return False
+        
         return True
 
     def do_GET(self):
@@ -571,7 +589,7 @@ def main():
         
         MyHandler.protocol_version = HTTP_VERSION        
         if options.connection == 'ssl':
-            server = SSLServer(('',4443), MyHandler, options)
+            server = SSLServer(('',options.port), MyHandler, options)
         else:
             server = ThreadingServer(('', server_port), MyHandler)
         server.timeout = 5
