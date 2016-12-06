@@ -196,6 +196,7 @@ class MyHandler(BaseHTTPRequestHandler):
         try:
             self.headers = http.client.parse_headers(self.rfile,
                                                      _class=self.MessageClass)
+            '''
             # Examine the headers and look for an Expect directive
             expect = self.headers.get('Expect', "")
             if (expect.lower() == "100-continue"):
@@ -208,9 +209,9 @@ class MyHandler(BaseHTTPRequestHandler):
                 print("expect 100 block on uWserver.py:205",self.close_connection)
                 #if not self.handle_expect_100():
                 #    return False
-
+            '''
             # read message body
-            elif self.headers.get('Content-Length') != None:
+            if self.headers.get('Content-Length') != None:
                 bodysize = int(self.headers.get('Content-Length'))
                 #print("length of the body is",bodysize)
                 message = self.rfile.read(bodysize)
@@ -416,13 +417,7 @@ class MyHandler(BaseHTTPRequestHandler):
         else:
             request_hash, __ = cgi.parse_header(self.headers.get('Content-MD5'))
         try:
-            if self.headers.get('Content-MD5') == None:
-                print("Content-MD5 not found")
-                self.send_response(404)
-                self.send_header('Connection', 'close')
-                self.end_headers()
-                return
-
+           
             if request_hash not in G_replay_dict:
                 self.send_response(404)
                 self.send_header('Connection', 'close')
