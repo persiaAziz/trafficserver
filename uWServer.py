@@ -17,10 +17,9 @@ import ssl
 import socket
 
 test_mode_enabled = True
-__version__="1.0.Beta"
+__version__="1.0"
 
-# hack to deal with sessionvalidation until we fix up the 
-# packaing logic
+
 sys.path.append(
     os.path.normpath(
         os.path.join(
@@ -66,13 +65,7 @@ class SSLServer(ThreadingMixIn, HTTPServer):
             self.server_bind()
             self.server_activate()
 
-# Warning: if you can't tell already, it's pretty hacky
-#
-# The standard library HTTP server doesn't exactly provide all the functionality we need from the API it exposes,
-# so we have to go in and override various methods that probably weren't intended to be overridden
-#
-# See the source code (https://hg.python.org/cpython/file/3.5/Lib/http/server.py) if you want to see where all these
-# variables are coming from
+
 class MyHandler(BaseHTTPRequestHandler):
     def handleExpect100Continue(self,contentLength,chunked=False):
         print("....expect",contentLength)
@@ -196,20 +189,7 @@ class MyHandler(BaseHTTPRequestHandler):
         try:
             self.headers = http.client.parse_headers(self.rfile,
                                                      _class=self.MessageClass)
-            '''
-            # Examine the headers and look for an Expect directive
-            expect = self.headers.get('Expect', "")
-            if (expect.lower() == "100-continue"):
-                
-                if self.headers.get('Content-Length') != None:
-                    bodysize = int(self.headers.get('Content-Length'))
-                    self.handleExpect100Continue(bodysize)
-                elif self.headers.get('Transfer-Encoding',"") == 'chunked':
-                    self.handleExpect100Continue(0,True)
-                print("expect 100 block on uWserver.py:205",self.close_connection)
-                #if not self.handle_expect_100():
-                #    return False
-            '''
+
             # read message body
             if self.headers.get('Content-Length') != None:
                 bodysize = int(self.headers.get('Content-Length'))
@@ -306,7 +286,7 @@ class MyHandler(BaseHTTPRequestHandler):
             chunkedResponse= False
             if request_hash not in G_replay_dict:
                 self.send_response(404)
-                self.send_header('Server','blablabla')
+                self.send_header('Server','MicroServer')
                 self.send_header('Connection', 'close')
                 self.end_headers()
 
@@ -536,6 +516,12 @@ def main():
                         help="Bind server to public IP 0.0.0.0 vs private IP of 127.0.0.1"
                         )
 
+    parser.add_argument("--ip_address","-ip", 
+                        type=str, 
+                        default='',                        
+                        help="IP address of the interface to serve on"
+                        )
+
     parser.add_argument("--port","-p",
                         type=int,
                         default=SERVER_PORT,                        
@@ -578,39 +564,20 @@ def main():
     
     # start server
     try:
-        server_port = args.port
         socket_timeout = args.timeout
         test_mode_enabled = args.mode=="test"
         
         MyHandler.protocol_version = HTTP_VERSION        
         if options.connection == 'ssl':
-            server = SSLServer(('',options.port), MyHandler, options)
+            server = SSLServer((options.ip_address,options.port), MyHandler, options)
         else:
-            server = ThreadingServer(('', server_port), MyHandler)
+            server = ThreadingServer((options.ip_address, options.port), MyHandler)
         server.timeout = 5
         print("started server")
         server_thread = threading.Thread(target=server.serve_forever())
         server_thread.daemon=True
         server_thread.start()
 
-        #s_serverThread.daemon = True
-        #s_serverThread.start()
-        #threads.append(s_serverThread)
-
-        
-        #server.timeout = socket_timeout or 5
-        #print("=== started httpserver ===")
-        #server_thread = threading.Thread(target=server.serve_forever())
-        #server_thread.daemon=True
-        #server_thread.start()
-        #threads.append(server_thread)
-        #server.serve_forever()
-        
-        #for t in threads:
-        #    t.start()
-
-        #for t in threads:
-        #    t.join()
     except KeyboardInterrupt:
         print("\n=== ^C received, shutting down httpserver ===")
         server.socket.close()
