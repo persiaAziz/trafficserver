@@ -50,6 +50,7 @@ test_certlookup_LDADD = \
   $(top_builddir)/iocore/eventsystem/libinkevent.a
 
 libinknet_a_SOURCES = \
+  ActionProcessor.cc \
   BIO_fastopen.cc \
   BIO_fastopen.h \
   Connection.cc \
@@ -65,6 +66,7 @@ libinknet_a_SOURCES = \
   SessionAccept.cc \
   Net.cc \
   NetVConnection.cc \
+  P_ActionProcessor.h \
   P_CompletionUtil.h \
   P_Connection.h \
   P_InkBulkIO.h \
@@ -80,6 +82,7 @@ libinknet_a_SOURCES = \
   P_SSLNetVConnection.h \
   P_SSLNextProtocolAccept.h \
   P_SSLNextProtocolSet.h \
+  P_SSLSNI.h \
   P_SSLUtils.h \
   P_SSLClientUtils.h \
   P_OCSPStapling.h \
@@ -105,6 +108,7 @@ libinknet_a_SOURCES = \
   SSLNetVConnection.cc \
   SSLNextProtocolAccept.cc \
   SSLNextProtocolSet.cc \
+  SSLSNIConfig.cc \
   SSLUtils.cc \
   SSLClientUtils.cc \
   OCSPStapling.cc \

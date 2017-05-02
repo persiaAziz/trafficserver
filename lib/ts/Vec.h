@@ -858,7 +858,7 @@ Vec<C, A, S>::free_and_clear()
 {
   for (int x = 0; x < n; x++)
     if (v[x])
-      A::free(v[x]);
+      A::free((void *)v[x]);
   clear();
 }
 

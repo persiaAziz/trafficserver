@@ -275,7 +275,6 @@ public:
       npnSet = nullptr;
   }
 
-
 private:
   SSLNetVConnection(const SSLNetVConnection &);
   SSLNetVConnection &operator=(const SSLNetVConnection &);

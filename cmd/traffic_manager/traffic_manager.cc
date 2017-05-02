@@ -962,6 +962,7 @@ SigChldHandler(int /* sig ATS_UNUSED */)
 void
 fileUpdated(char *fname, bool incVersion)
 {
+
   if (strcmp(fname, "cluster.config") == 0) {
     lmgmt->signalFileChange("proxy.config.cluster.cluster_configuration");
 
@@ -1021,6 +1022,8 @@ fileUpdated(char *fname, bool incVersion)
     mgmt_log("[fileUpdated] metrics.config file has been modified\n");
   } else if (strcmp(fname, "congestion.config") == 0) {
     lmgmt->signalFileChange("proxy.config.http.congestion_control.filename");
+  } else if (strcmp(fname, "ssl_SNI.config") == 0) {
+    lmgmt->signalFileChange("proxy.config.ssl.SNI.filename");
   } else {
     mgmt_log("[fileUpdated] Unknown config file updated '%s'\n", fname);
   }

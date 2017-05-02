@@ -302,7 +302,7 @@ SSLConfigParams::initialize()
   // ++++++++++++++++++++++++ Client part ++++++++++++++++++++
   client_verify_depth = 7;
   // Read via overridable config now
-  // REC_ReadConfigInt32(clientVerify, "proxy.config.ssl.client.verify.server");
+  REC_EstablishStaticConfigByte(clientVerify, "proxy.config.ssl.client.verify.server");
 
   ssl_client_cert_filename = nullptr;
   ssl_client_cert_path     = nullptr;
@@ -384,12 +384,12 @@ SSLConfigParams::InsertCTX(cchar *client_cert, SSL_CTX *cctx) const
 }
 
 void
-SSLConfigParams::printCTXmap()
+SSLConfigParams::printCTXmap() const
 {
   Vec<cchar *> keys;
   ctx_map.get_keys(keys);
   for (size_t i = 0; i < keys.length(); i++)
-    Debug("ssl", "Client certificates in the map %s", keys.get(i));
+    Debug("ssl", "Client certificates in the map %s: %p", keys.get(i),ctx_map.get(keys.get(i)));
 }
 void
 SSLConfigParams::freeCTXmap() const

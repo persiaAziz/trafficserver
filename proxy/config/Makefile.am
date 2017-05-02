@@ -41,6 +41,7 @@ dist_sysconf_DATA =	\
   socks.config.default \
   splitdns.config.default \
   ssl_multicert.config.default \
+  ssl_SNI.config.default \
   vaddrs.config.default \
   volume.config.default
 

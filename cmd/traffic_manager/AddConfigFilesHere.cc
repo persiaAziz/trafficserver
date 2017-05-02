@@ -82,5 +82,6 @@ initializeRegistry()
   configFiles->addFile("splitdns.config", false);
   configFiles->addFile("ssl_multicert.config", false);
   configFiles->addFile("metrics.config", false);
+  configFiles->addFile("ssl_SNI.config",false);
   configFiles->registerCallback(testcall);
 }

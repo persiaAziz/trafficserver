@@ -31,6 +31,7 @@
 #include "P_SSLConfig.h"
 #include "BIO_fastopen.h"
 #include "Log.h"
+#include "P_SSLSNI.h"
 
 #include <climits>
 #include <string>
@@ -968,31 +969,38 @@ SSLNetVConnection::sslStartHandShake(int event, int &err)
     return sslServerHandShakeEvent(err);
 
   case SSL_EVENT_CLIENT:
-    if (this->ssl == nullptr) {
-      SSL_CTX *clientCTX = nullptr;
-      if (this->options.clientCertificate) {
-        const char *certfile = (const char *)this->options.clientCertificate;
-        if (certfile != nullptr) {
-          clientCTX = params->getCTX(certfile);
-          if (clientCTX != nullptr)
-            Debug("ssl", "context for %s is found at %p", this->options.clientCertificate.get(), (void *)clientCTX);
-          else
-            Debug("ssl", "failed to find context for %s", this->options.clientCertificate.get());
-        }
-      } else {
-        clientCTX = params->client_ctx;
-      }
-      this->ssl = make_ssl_connection(clientCTX, this);
-      if (this->ssl == nullptr) {
-        SSLErrorVC(this, "failed to create SSL client session");
-        return EVENT_ERROR;
-      }
 
-      // Making the check here instead of later, so we only
-      // do this setting immediately after we create the SSL object
-      int clientVerify = this->getClientVerifyEnable();
-      int verifyValue  = clientVerify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE;
-      SSL_set_verify(this->ssl, verifyValue, verify_callback);
+    if (this->ssl == nullptr) {
+        // Making the check here instead of later, so we only
+        // do this setting immediately after we create the SSL object
+        SNIConfig::scoped_config sniParam;
+        int8_t clientVerify = 0;
+        cchar* serverKey = this->options.sni_servername;
+        if(!serverKey){
+            char buff[INET6_ADDRSTRLEN];
+            ats_ip_ntop(this->get_remote_addr(), buff, INET6_ADDRSTRLEN);
+            serverKey = buff;
+        }
+        auto nps = sniParam->getPropertyConfig(serverKey);
+        SSL_CTX *clientCTX = nullptr;
+
+        if(nps)
+        {
+             clientCTX = nps->ctx;
+             clientVerify = nps->verifyLevel;
+        }
+        else
+        {
+             clientCTX = params->client_ctx;
+             clientVerify = params->clientVerify;
+        }
+
+        this->ssl = make_ssl_connection(clientCTX, this);
+        if (this->ssl == nullptr) {
+         SSLErrorVC(this, "failed to create SSL client session");
+         return EVENT_ERROR;
+        }
+        SSL_set_verify(this->ssl, clientVerify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, verify_callback);
 
 #if TS_USE_TLS_SNI
       if (this->options.sni_servername) {
