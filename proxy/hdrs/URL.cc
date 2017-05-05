@@ -1690,8 +1690,9 @@ url_MD5_get_fast(const URLImpl *url, CryptoContext &ctx, CryptoHash *hash, cache
   if (generation != -1) {
     ctx.update(&generation, sizeof(generation));
   }
-
   ctx.finalize(hash);
+  char hashStr[33];
+  Debug("cache", "fast string to be hashed: %s%d => %s", buffer, generation, ink_code_to_hex_str(hashStr, (unsigned char *)&hash));
 }
 
 static inline void
@@ -1749,6 +1750,7 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
         }
 
         if (p == e) {
+          char hashStr[33];
           ctx.update(buffer, BUFSIZE);
           p = buffer;
         }
@@ -1757,6 +1759,7 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
   }
 
   if (p != buffer) {
+    char hashStr[33];
     ctx.update(buffer, p - buffer);
   }
 
@@ -1766,8 +1769,10 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
   if (generation != -1) {
     ctx.update(&generation, sizeof(generation));
   }
-
   ctx.finalize(hash);
+  char hashStr[33];
+  Debug("cache", "string to be hashed: %.*s%d%d => %s", (p - buffer), buffer, port, generation,
+        ink_code_to_hex_str(hashStr, (unsigned char *)&hash));
 }
 
 void
@@ -1815,6 +1820,7 @@ url_host_MD5_get(URLImpl *url, INK_MD5 *md5)
   // Especially since it's in_port_t for url_MD5_get.
   int port = url_canonicalize_port(url->m_url_type, url->m_port);
   ctx.update(&port, sizeof(port));
+  Debug("cache", "%s://%s:%d", url->m_ptr_scheme, url->m_ptr_host, port);
   ctx.finalize(*md5);
 }
 
