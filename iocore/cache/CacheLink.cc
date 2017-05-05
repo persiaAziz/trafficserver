@@ -82,7 +82,6 @@ Cache::deref(Continuation *cont, const CacheKey *key, CacheFragType type, const 
   }
 
   ink_assert(caches[type] == this);
-
   Vol *vol = key_to_vol(key, hostname, host_len);
   Dir result;
   Dir *last_collision = nullptr;
