@@ -170,10 +170,6 @@ public:
   set_outbound_ip(const IpAddr &new_addr)
   {
   }
-  virtual void
-  clear_outbound()
-  {
-  }
   virtual bool
   is_outbound_transparent() const
   {
