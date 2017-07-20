@@ -548,7 +548,6 @@ class VolumeAllocator
 
   Cache _cache;         ///< Current state.
   VolumeConfig _vols;   ///< Configuration state.
-  bool _dry_run = true; ///< Don't update.
 
 public:
   VolumeAllocator();
@@ -682,7 +681,7 @@ VolumeAllocator::allocateFor(Span &span)
   }
   if (Verbosity >= NORMAL)
     std::cout << "     Total " << span_used << std::endl;
-  if (!_dry_run) {
+  if (OPEN_RW_FLAG) {
     if (Verbosity >= NORMAL)
       std::cout << " Updating Header ... ";
     zret = span.updateHeader();
