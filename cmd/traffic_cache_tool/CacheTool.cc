@@ -1214,6 +1214,12 @@ Clear_Spans(int argc, char *argv[])
   return zret;
 }
 
+Errata
+Find_Stripe(int argc, char* argv[])
+{
+    
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1248,6 +1254,8 @@ main(int argc, char *argv[])
   Commands.add(std::string("volumes"), std::string("Volumes"), &Simulate_Span_Allocation);
   Commands.add(std::string("alloc"), std::string("Storage allocation"))
     .subCommand(std::string("free"), std::string("Allocate storage on free (empty) spans"), &Cmd_Allocate_Empty_Spans);
+  Commands.add(std::string("find"), std::string("Find Stripe Assignment"))
+    .subCommand(std::string("url"), std::string("URL"),&Find_Stripe);
 
   Commands.setArgIndex(optind);
 
