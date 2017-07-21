@@ -497,6 +497,7 @@ Errata
 Cache::allocStripe(Span *span, int vol_idx, CacheStripeBlocks len)
 {
   auto rv = span->allocStripe(vol_idx, len);
+  std::cout<<span->_path<<":"<<vol_idx<<std::endl;
   if (rv.isOK()) {
     _volumes[vol_idx]._stripes.push_back(rv);
   }
