@@ -37,6 +37,10 @@
 #include "File.h"
 #include "CacheDefs.h"
 #include "Command.h"
+#include "ts/ink_code.h"
+#include "ts/INK_MD5.h"
+#include <cstring>
+#include <openssl/md5.h>
 
 using ts::Bytes;
 using ts::Megabytes;
@@ -1218,7 +1222,13 @@ Clear_Spans(int argc, char *argv[])
 Errata
 Find_Stripe(int argc, char* argv[])
 {
-    
+    Errata zret;
+    INK_MD5 hash;
+    char hashStr[33];
+    char* host="http://s.yimg.com";
+    ink_code_md5((unsigned char *)host,strlen(host),(unsigned char*)&hash);
+    printf("%d hash of %s is %s\n",argc,host,ink_code_to_hex_str(hashStr,(unsigned char*)&hash));
+    return zret;
 }
 
 int
@@ -1256,7 +1266,7 @@ main(int argc, char *argv[])
   Commands.add(std::string("alloc"), std::string("Storage allocation"))
     .subCommand(std::string("free"), std::string("Allocate storage on free (empty) spans"), &Cmd_Allocate_Empty_Spans);
   Commands.add(std::string("find"), std::string("Find Stripe Assignment"))
-    .subCommand(std::string("url"), std::string("URL"),&Find_Stripe);
+    .subCommand(std::string("url"), std::string("URL"),[](int argc, char* argv[]){ return Find_Stripe(argc,argv); });
 
   Commands.setArgIndex(optind);
 
