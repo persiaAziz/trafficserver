@@ -52,7 +52,8 @@ using ts::Errata;
 using ts::FilePath;
 using ts::MemView;
 using ts::CacheDirEntry;
-
+#define VOL_HASH_TABLE_SIZE 32707
+#define VOL_HASH_ALLOC_SIZE (8 * 1024 * 1024) // one chance per this unit
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
 enum { SILENT = 0, NORMAL, VERBOSE } Verbosity = NORMAL;
@@ -489,7 +490,7 @@ struct Cache {
   enum class SpanDumpDepth { SPAN, STRIPE, DIRECTORY };
   void dumpSpans(SpanDumpDepth depth);
   void dumpVolumes();
-
+  void build_vol_hash_table();
   //  ts::CacheStripeBlocks calcTotalSpanPhysicalSize();
   ts::CacheStripeBlocks calcTotalSpanConfiguredSize();
 
@@ -828,6 +829,109 @@ Cache::dumpSpans(SpanDumpDepth depth)
       }
     }
   }
+}
+
+void
+Cache::build_vol_hash_table()
+{
+  int num_vols          = this->_volumes.size();
+
+//TODO: Error handling; for now I am assuming all disks are good
+/*  
+  uint64_t total = 0;
+  int bad_vols   = 0;
+  int map        = 0;
+  uint64_t used  = 0;
+  // initialize number of elements per vol
+  for (int i = 0; i < num_vols; i++) {
+    if (DISK_BAD(cp->vols[i]->disk)) {
+      bad_vols++;
+      continue;
+    }
+    mapping[map] = i;
+    p[map++]     = cp->vols[i];
+    total += (cp->vols[i]->len >> STORE_BLOCK_SHIFT);
+  }
+
+  num_vols -= bad_vols;
+
+  if (!num_vols || !total) {
+    // all the disks are corrupt,
+    if (cp->vol_hash_table) {
+      new_Freer(cp->vol_hash_table, CACHE_MEM_FREE_TIMEOUT);
+    }
+    cp->vol_hash_table = nullptr;
+    ats_free(mapping);
+    ats_free(p);
+    return;
+  }
+*/
+  unsigned int *forvol   = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
+  unsigned int *gotvol   = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
+  unsigned int *rnd      = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
+  unsigned short *ttable = (unsigned short *)ats_malloc(sizeof(unsigned short) * VOL_HASH_TABLE_SIZE);
+  unsigned short *old_table;
+  unsigned int *rtable_entries = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
+  unsigned int rtable_size     = 0;
+  int i=0;
+  // estimate allocation
+  for(auto &elt:_volumes)
+  {
+    rtable_entries[i] = elt.second._size / VOL_HASH_ALLOC_SIZE;
+    rtable_size += rtable_entries[i];
+    i++;
+  }
+   /*
+  // seed random number generator
+  for (int i = 0; i < num_vols; i++) {
+    uint64_t x = p[i]->hash_id.fold();
+    rnd[i]     = (unsigned int)x;
+  }
+  // initialize table to "empty"
+  for (int i = 0; i < VOL_HASH_TABLE_SIZE; i++) {
+    ttable[i] = VOL_HASH_EMPTY;
+  }
+  // generate random numbers proportaion to allocation
+  rtable_pair *rtable = (rtable_pair *)ats_malloc(sizeof(rtable_pair) * rtable_size);
+  int rindex          = 0;
+  for (int i = 0; i < num_vols; i++) {
+    for (int j = 0; j < (int)rtable_entries[i]; j++) {
+      rtable[rindex].rval = next_rand(&rnd[i]);
+      rtable[rindex].idx  = i;
+      rindex++;
+    }
+  }
+  ink_assert(rindex == (int)rtable_size);
+  // sort (rand #, vol $ pairs)
+  qsort(rtable, rtable_size, sizeof(rtable_pair), cmprtable);
+ 
+  unsigned int width = (1LL << 32) / VOL_HASH_TABLE_SIZE;
+  unsigned int pos; // target position to allocate
+  // select vol with closest random number for each bucket
+  int i = 0; // index moving through the random numbers
+  for (int j = 0; j < VOL_HASH_TABLE_SIZE; j++) {
+    pos = width / 2 + j * width; // position to select closest to
+    while (pos > rtable[i].rval && i < (int)rtable_size - 1) {
+      i++;
+    }
+    ttable[j] = rtable[i].idx;
+    Debug("cache_init","hash table %d====================>>>>>>>>>>>>>>>>>>..",ttable[j]);
+    gotvol[rtable[i].idx]++;
+  }
+  for (int i = 0; i < num_vols; i++) {
+    Debug("cache_init", "build_vol_hash_table index %d mapped to %d requested %d got %d", i, i, forvol[i], gotvol[i]);
+  }
+  // install new table
+  if (nullptr != (old_table = ink_atomic_swap(&(cp->vol_hash_table), ttable))) {
+    new_Freer(old_table, CACHE_MEM_FREE_TIMEOUT);
+  }
+  ats_free(p);
+  ats_free(forvol);
+  ats_free(gotvol);
+  ats_free(rnd);
+  ats_free(rtable_entries);
+  ats_free(rtable);
+  */
 }
 
 void
