@@ -55,6 +55,7 @@ using ts::CacheDirEntry;
 #define VOL_HASH_TABLE_SIZE 32707
 #define VOL_HASH_ALLOC_SIZE (8 * 1024 * 1024) // one chance per this unit
 #define VOL_HASH_EMPTY 0xFFFF
+#define STORE_BLOCK_SHIFT 13
 
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
@@ -1119,7 +1120,7 @@ void
 Span::build_stripe_hash_table()
 {
   int num_stripes          = this->_stripes.size();
-
+  int total = 0;
 //TODO: Error handling; for now I am assuming all disks are good
 /*
   uint64_t total = 0;
@@ -1166,7 +1167,13 @@ Span::build_stripe_hash_table()
     uint64_t x = elt->hash_id.fold();
     // seed random number generator
     rnd[i]     = (unsigned int)x;
+    total += (elt->_len >> STORE_BLOCK_SHIFT);
     i++;
+  }
+
+  for(auto &elt:_stripes)
+  {
+      forvol[i] = (VOL_HASH_TABLE_SIZE * (elt->_len >> STORE_BLOCK_SHIFT)) / total;
   }
   // initialize table to "empty"
   for (int i = 0; i < VOL_HASH_TABLE_SIZE; i++) {
