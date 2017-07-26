@@ -54,6 +54,8 @@ using ts::MemView;
 using ts::CacheDirEntry;
 #define VOL_HASH_TABLE_SIZE 32707
 #define VOL_HASH_ALLOC_SIZE (8 * 1024 * 1024) // one chance per this unit
+#define VOL_HASH_EMPTY 0xFFFF
+
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
 enum { SILENT = 0, NORMAL, VERBOSE } Verbosity = NORMAL;
@@ -84,6 +86,8 @@ struct Span {
   /// This is broken and needs to be cleaned up.
   void clearPermanently();
 
+  void build_stripe_hash_table();
+
   ts::Rv<Stripe *> allocStripe(int vol_idx, CacheStripeBlocks len);
   Errata updateHeader(); ///< Update serialized header and write to disk.
 
@@ -101,6 +105,7 @@ struct Span {
   /// Live information about stripes.
   /// Seeded from @a _header and potentially agumented with direct probing.
   std::list<Stripe *> _stripes;
+  unsigned short* stripes_hash_table;
 };
 /* --------------------------------------------------------------------------------------- */
 struct Stripe {
@@ -150,6 +155,7 @@ struct Stripe {
   void updateLiveData(enum Copy c);
 
   Span *_span;           ///< Hosting span.
+  INK_MD5 hash_id;       ///hash_id
   Bytes _start;          ///< Offset of first byte of stripe.
   Bytes _content;        ///< Start of content.
   CacheStoreBlocks _len; ///< Length of stripe.
@@ -187,6 +193,13 @@ Stripe::Chunk::clear()
 
 Stripe::Stripe(Span *span, Bytes start, CacheStoreBlocks len) : _span(span), _start(start), _len(len)
 {
+    const char* diskPath = span->_path.path();
+    const size_t hash_seed_size = strlen(diskPath);
+    const size_t hash_text_size = hash_seed_size + 32;
+    char* hash_text = static_cast<char*>(ats_malloc(hash_text_size));
+    snprintf(hash_text + hash_seed_size, (hash_text_size - hash_seed_size), " %" PRIu64 ":%" PRIu64 "", (uint64_t)_start,
+           (uint64_t)_len);
+    ink_code_md5((unsigned char *)hash_text,strlen(hash_text),(unsigned char*)&hash_id);
 }
 
 bool
@@ -490,7 +503,6 @@ struct Cache {
   enum class SpanDumpDepth { SPAN, STRIPE, DIRECTORY };
   void dumpSpans(SpanDumpDepth depth);
   void dumpVolumes();
-  void build_vol_hash_table();
   //  ts::CacheStripeBlocks calcTotalSpanPhysicalSize();
   ts::CacheStripeBlocks calcTotalSpanConfiguredSize();
 
@@ -832,109 +844,6 @@ Cache::dumpSpans(SpanDumpDepth depth)
 }
 
 void
-Cache::build_vol_hash_table()
-{
-  int num_vols          = this->_volumes.size();
-
-//TODO: Error handling; for now I am assuming all disks are good
-/*  
-  uint64_t total = 0;
-  int bad_vols   = 0;
-  int map        = 0;
-  uint64_t used  = 0;
-  // initialize number of elements per vol
-  for (int i = 0; i < num_vols; i++) {
-    if (DISK_BAD(cp->vols[i]->disk)) {
-      bad_vols++;
-      continue;
-    }
-    mapping[map] = i;
-    p[map++]     = cp->vols[i];
-    total += (cp->vols[i]->len >> STORE_BLOCK_SHIFT);
-  }
-
-  num_vols -= bad_vols;
-
-  if (!num_vols || !total) {
-    // all the disks are corrupt,
-    if (cp->vol_hash_table) {
-      new_Freer(cp->vol_hash_table, CACHE_MEM_FREE_TIMEOUT);
-    }
-    cp->vol_hash_table = nullptr;
-    ats_free(mapping);
-    ats_free(p);
-    return;
-  }
-*/
-  unsigned int *forvol   = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
-  unsigned int *gotvol   = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
-  unsigned int *rnd      = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
-  unsigned short *ttable = (unsigned short *)ats_malloc(sizeof(unsigned short) * VOL_HASH_TABLE_SIZE);
-  unsigned short *old_table;
-  unsigned int *rtable_entries = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_vols);
-  unsigned int rtable_size     = 0;
-  int i=0;
-  // estimate allocation
-  for(auto &elt:_volumes)
-  {
-    rtable_entries[i] = elt.second._size / VOL_HASH_ALLOC_SIZE;
-    rtable_size += rtable_entries[i];
-    i++;
-  }
-   /*
-  // seed random number generator
-  for (int i = 0; i < num_vols; i++) {
-    uint64_t x = p[i]->hash_id.fold();
-    rnd[i]     = (unsigned int)x;
-  }
-  // initialize table to "empty"
-  for (int i = 0; i < VOL_HASH_TABLE_SIZE; i++) {
-    ttable[i] = VOL_HASH_EMPTY;
-  }
-  // generate random numbers proportaion to allocation
-  rtable_pair *rtable = (rtable_pair *)ats_malloc(sizeof(rtable_pair) * rtable_size);
-  int rindex          = 0;
-  for (int i = 0; i < num_vols; i++) {
-    for (int j = 0; j < (int)rtable_entries[i]; j++) {
-      rtable[rindex].rval = next_rand(&rnd[i]);
-      rtable[rindex].idx  = i;
-      rindex++;
-    }
-  }
-  ink_assert(rindex == (int)rtable_size);
-  // sort (rand #, vol $ pairs)
-  qsort(rtable, rtable_size, sizeof(rtable_pair), cmprtable);
- 
-  unsigned int width = (1LL << 32) / VOL_HASH_TABLE_SIZE;
-  unsigned int pos; // target position to allocate
-  // select vol with closest random number for each bucket
-  int i = 0; // index moving through the random numbers
-  for (int j = 0; j < VOL_HASH_TABLE_SIZE; j++) {
-    pos = width / 2 + j * width; // position to select closest to
-    while (pos > rtable[i].rval && i < (int)rtable_size - 1) {
-      i++;
-    }
-    ttable[j] = rtable[i].idx;
-    Debug("cache_init","hash table %d====================>>>>>>>>>>>>>>>>>>..",ttable[j]);
-    gotvol[rtable[i].idx]++;
-  }
-  for (int i = 0; i < num_vols; i++) {
-    Debug("cache_init", "build_vol_hash_table index %d mapped to %d requested %d got %d", i, i, forvol[i], gotvol[i]);
-  }
-  // install new table
-  if (nullptr != (old_table = ink_atomic_swap(&(cp->vol_hash_table), ttable))) {
-    new_Freer(old_table, CACHE_MEM_FREE_TIMEOUT);
-  }
-  ats_free(p);
-  ats_free(forvol);
-  ats_free(gotvol);
-  ats_free(rnd);
-  ats_free(rtable_entries);
-  ats_free(rtable);
-  */
-}
-
-void
 Cache::dumpVolumes()
 {
   for (auto const &elt : _volumes) {
@@ -1173,6 +1082,184 @@ Span::clearPermanently()
     std::cout << "Clearing " << _path << " not performed, write not enabled" << std::endl;
   }
 }
+
+// explicit pair for random table in build_vol_hash_table
+struct rtable_pair {
+  unsigned int rval; ///< relative value, used to sort.
+  unsigned int idx;  ///< volume mapping table index.
+};
+
+// comparison operator for random table in build_vol_hash_table
+// sorts based on the randomly assigned rval
+static int
+cmprtable(const void *aa, const void *bb)
+{
+  rtable_pair *a = (rtable_pair *)aa;
+  rtable_pair *b = (rtable_pair *)bb;
+  if (a->rval < b->rval) {
+    return -1;
+  }
+  if (a->rval > b->rval) {
+    return 1;
+  }
+  return 0;
+}
+
+unsigned int
+next_rand(unsigned int *p)
+{
+  unsigned int seed = *p;
+  seed              = 1103515145 * seed + 12345;
+  *p                = seed;
+  return seed;
+}
+
+void
+Span::build_stripe_hash_table()
+{
+  int num_stripes          = this->_stripes.size();
+
+//TODO: Error handling; for now I am assuming all disks are good
+/*
+  uint64_t total = 0;
+  int bad_vols   = 0;
+  int map        = 0;
+  uint64_t used  = 0;
+  // initialize number of elements per vol
+  for (int i = 0; i < num_vols; i++) {
+    if (DISK_BAD(cp->vols[i]->disk)) {
+      bad_vols++;
+      continue;
+    }
+    mapping[map] = i;
+    p[map++]     = cp->vols[i];
+    total += (cp->vols[i]->len >> STORE_BLOCK_SHIFT);
+  }
+
+  num_vols -= bad_vols;
+
+  if (!num_vols || !total) {
+    // all the disks are corrupt,
+    if (cp->vol_hash_table) {
+      new_Freer(cp->vol_hash_table, CACHE_MEM_FREE_TIMEOUT);
+    }
+    cp->vol_hash_table = nullptr;
+    ats_free(mapping);
+    ats_free(p);
+    return;
+  }
+*/
+  unsigned int *forvol   = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
+  unsigned int *gotvol   = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
+  unsigned int *rnd      = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
+  unsigned short *ttable = (unsigned short *)ats_malloc(sizeof(unsigned short) * VOL_HASH_TABLE_SIZE);
+  unsigned short *old_table;
+  unsigned int *rtable_entries = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
+  unsigned int rtable_size     = 0;
+  int i=0;
+  // estimate allocation
+  for(auto &elt:_stripes)
+  {
+    rtable_entries[i] = elt->_len / VOL_HASH_ALLOC_SIZE;
+    rtable_size += rtable_entries[i];
+    uint64_t x = elt->hash_id.fold();
+    // seed random number generator
+    rnd[i]     = (unsigned int)x;
+    i++;
+  }
+  // initialize table to "empty"
+  for (int i = 0; i < VOL_HASH_TABLE_SIZE; i++) {
+    ttable[i] = VOL_HASH_EMPTY;
+  }
+
+  // generate random numbers proportaion to allocation
+  rtable_pair *rtable = (rtable_pair *)ats_malloc(sizeof(rtable_pair) * rtable_size);
+  int rindex          = 0;
+  for (int i = 0; i < num_stripes; i++) {
+    for (int j = 0; j < (int)rtable_entries[i]; j++) {
+      rtable[rindex].rval = next_rand(&rnd[i]);
+      rtable[rindex].idx  = i;
+      rindex++;
+    }
+  }
+ // ink_assert(rindex == (int)rtable_size);
+  // sort (rand #, vol $ pairs)
+  qsort(rtable, rtable_size, sizeof(rtable_pair), cmprtable);
+  unsigned int width = (1LL << 32) / VOL_HASH_TABLE_SIZE;
+  unsigned int pos; // target position to allocate
+  // select vol with closest random number for each bucket
+  i = 0; // index moving through the random numbers
+  for (int j = 0; j < VOL_HASH_TABLE_SIZE; j++) {
+    pos = width / 2 + j * width; // position to select closest to
+    while (pos > rtable[i].rval && i < (int)rtable_size - 1) {
+      i++;
+    }
+    ttable[j] = rtable[i].idx;
+    gotvol[rtable[i].idx]++;
+  }
+  for (int i = 0; i < num_stripes; i++) {
+    printf("build_vol_hash_table index %d mapped to %d requested %d got %d", i, i, forvol[i], gotvol[i]);
+  }
+  stripes_hash_table = ttable;
+
+  ats_free(forvol);
+  ats_free(gotvol);
+  ats_free(rnd);
+  ats_free(rtable_entries);
+  ats_free(rtable);
+   /*
+  // seed random number generator
+  for (int i = 0; i < num_vols; i++) {
+    uint64_t x = p[i]->hash_id.fold();
+    rnd[i]     = (unsigned int)x;
+  }
+  // initialize table to "empty"
+  for (int i = 0; i < VOL_HASH_TABLE_SIZE; i++) {
+    ttable[i] = VOL_HASH_EMPTY;
+  }
+  // generate random numbers proportaion to allocation
+  rtable_pair *rtable = (rtable_pair *)ats_malloc(sizeof(rtable_pair) * rtable_size);
+  int rindex          = 0;
+  for (int i = 0; i < num_vols; i++) {
+    for (int j = 0; j < (int)rtable_entries[i]; j++) {
+      rtable[rindex].rval = next_rand(&rnd[i]);
+      rtable[rindex].idx  = i;
+      rindex++;
+    }
+  }
+  ink_assert(rindex == (int)rtable_size);
+  // sort (rand #, vol $ pairs)
+  qsort(rtable, rtable_size, sizeof(rtable_pair), cmprtable);
+
+  unsigned int width = (1LL << 32) / VOL_HASH_TABLE_SIZE;
+  unsigned int pos; // target position to allocate
+  // select vol with closest random number for each bucket
+  int i = 0; // index moving through the random numbers
+  for (int j = 0; j < VOL_HASH_TABLE_SIZE; j++) {
+    pos = width / 2 + j * width; // position to select closest to
+    while (pos > rtable[i].rval && i < (int)rtable_size - 1) {
+      i++;
+    }
+    ttable[j] = rtable[i].idx;
+    Debug("cache_init","hash table %d====================>>>>>>>>>>>>>>>>>>..",ttable[j]);
+    gotvol[rtable[i].idx]++;
+  }
+  for (int i = 0; i < num_vols; i++) {
+    Debug("cache_init", "build_vol_hash_table index %d mapped to %d requested %d got %d", i, i, forvol[i], gotvol[i]);
+  }
+  // install new table
+  if (nullptr != (old_table = ink_atomic_swap(&(cp->vol_hash_table), ttable))) {
+    new_Freer(old_table, CACHE_MEM_FREE_TIMEOUT);
+  }
+  ats_free(p);
+  ats_free(forvol);
+  ats_free(gotvol);
+  ats_free(rnd);
+  ats_free(rtable_entries);
+  ats_free(rtable);
+  */
+}
+
 /* --------------------------------------------------------------------------------------- */
 Errata
 VolumeConfig::load(FilePath const &path)
@@ -1327,6 +1414,12 @@ Errata
 Find_Stripe(int argc, char* argv[])
 {
     Errata zret;
+    Cache cache;
+
+    if ((zret = cache.loadSpan(SpanFile)))
+    {
+        printf("yohoo");
+    }
     INK_MD5 hash;
     char hashStr[33];
     char* host="http://s.yimg.com";
