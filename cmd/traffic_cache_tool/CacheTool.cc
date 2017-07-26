@@ -757,6 +757,7 @@ Cache::loadSpanDirect(FilePath const &path, int vol_idx, Bytes size)
     } else {
       span->clear();
     }
+    span->build_stripe_hash_table();
     _spans.push_back(span.release());
   }
   return zret;
