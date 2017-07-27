@@ -1162,6 +1162,7 @@ build_stripe_hash_table()
   // estimate allocation
   for(auto &elt:globalList_stripe)
   {
+      printf("stripe length %d\n",elt->_len);
     rtable_entries[i] = elt->_len / VOL_HASH_ALLOC_SIZE;
     rtable_size += rtable_entries[i];
     uint64_t x = elt->hash_id.fold();
@@ -1206,7 +1207,7 @@ build_stripe_hash_table()
     gotvol[rtable[i].idx]++;
   }
   for (int i = 0; i < num_stripes; i++) {
-    printf("build_vol_hash_table index %d mapped to %d requested %d got %d", i, i, forvol[i], gotvol[i]);
+    printf("build_vol_hash_table index %d mapped to %d requested %d got %d\n", i, i, forvol[i], gotvol[i]);
   }
   stripes_hash_table = ttable;
 
