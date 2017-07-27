@@ -56,7 +56,7 @@ using ts::CacheDirEntry;
 #define VOL_HASH_ALLOC_SIZE (8 * 1024 * 1024) // one chance per this unit
 #define VOL_HASH_EMPTY 0xFFFF
 #define STORE_BLOCK_SHIFT 13
-
+#define STORE_BLOCK_SIZE 8192
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
 enum { SILENT = 0, NORMAL, VERBOSE } Verbosity = NORMAL;
@@ -1162,7 +1162,7 @@ build_stripe_hash_table()
   // estimate allocation
   for(auto &elt:globalList_stripe)
   {
-      printf("stripe length %d\n",elt->_len);
+      printf("stripe length %"PRId64"\n",elt->_len*STORE_BLOCK_SIZE);
     rtable_entries[i] = elt->_len / VOL_HASH_ALLOC_SIZE;
     rtable_size += rtable_entries[i];
     uint64_t x = elt->hash_id.fold();
