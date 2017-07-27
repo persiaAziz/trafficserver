@@ -1870,7 +1870,7 @@ build_vol_hash_table(CacheHostRecord *cp)
 
   // estimate allocation
   for (int i = 0; i < num_vols; i++) {
-      printf("stripe len %d\n",p[i]->len);
+      printf("stripe len %"PRId64"\n",p[i]->len);
     forvol[i] = (VOL_HASH_TABLE_SIZE * (p[i]->len >> STORE_BLOCK_SHIFT)) / total;
     used += forvol[i];
     rtable_entries[i] = p[i]->len / VOL_HASH_ALLOC_SIZE;
