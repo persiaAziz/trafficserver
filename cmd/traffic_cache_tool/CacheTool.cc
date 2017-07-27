@@ -72,7 +72,8 @@ ts::CommandTable Commands;
 int OPEN_RW_FLAG = O_RDONLY;
 
 struct Stripe;
-
+std::list<Stripe*> globalList_stripe;
+unsigned short* stripes_hash_table;
 struct Span {
   Span(FilePath const &path) : _path(path) {}
   Errata load();
@@ -87,7 +88,6 @@ struct Span {
   /// This is broken and needs to be cleaned up.
   void clearPermanently();
 
-  void build_stripe_hash_table();
 
   ts::Rv<Stripe *> allocStripe(int vol_idx, CacheStripeBlocks len);
   Errata updateHeader(); ///< Update serialized header and write to disk.
@@ -106,7 +106,7 @@ struct Span {
   /// Live information about stripes.
   /// Seeded from @a _header and potentially agumented with direct probing.
   std::list<Stripe *> _stripes;
-  unsigned short* stripes_hash_table;
+  
 };
 /* --------------------------------------------------------------------------------------- */
 struct Stripe {
@@ -753,12 +753,12 @@ Cache::loadSpanDirect(FilePath const &path, int vol_idx, Bytes size)
           span->_free_space += stripe->_len;
         }
         span->_stripes.push_back(stripe);
+        globalList_stripe.push_back(stripe);
       }
       span->_vol_idx = vol_idx;
     } else {
       span->clear();
     }
-    span->build_stripe_hash_table();
     _spans.push_back(span.release());
   }
   return zret;
@@ -1117,9 +1117,9 @@ next_rand(unsigned int *p)
 }
 
 void
-Span::build_stripe_hash_table()
+build_stripe_hash_table()
 {
-  int num_stripes          = this->_stripes.size();
+  int num_stripes          = globalList_stripe.size();
   int total = 0;
 //TODO: Error handling; for now I am assuming all disks are good
 /*
@@ -1160,7 +1160,7 @@ Span::build_stripe_hash_table()
   unsigned int rtable_size     = 0;
   int i=0;
   // estimate allocation
-  for(auto &elt:_stripes)
+  for(auto &elt:globalList_stripe)
   {
     rtable_entries[i] = elt->_len / VOL_HASH_ALLOC_SIZE;
     rtable_size += rtable_entries[i];
@@ -1171,7 +1171,7 @@ Span::build_stripe_hash_table()
     i++;
   }
 
-  for(auto &elt:_stripes)
+  for(auto &elt:globalList_stripe)
   {
       forvol[i] = (VOL_HASH_TABLE_SIZE * (elt->_len >> STORE_BLOCK_SHIFT)) / total;
   }
@@ -1426,6 +1426,8 @@ Find_Stripe(int argc, char* argv[])
 
     if ((zret = cache.loadSpan(SpanFile)))
     {
+
+    build_stripe_hash_table();
         printf("yohoo");
     }
     INK_MD5 hash;
