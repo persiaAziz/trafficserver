@@ -56,6 +56,7 @@ using ts::MemView;
 using ts::CacheDirEntry;
 #define VOL_HASH_TABLE_SIZE 32707
 #define VOL_HASH_ALLOC_SIZE (8 * 1024 * 1024) // one chance per this unit
+CacheStoreBlocks Vol_hash_alloc_size(1024);
 #define VOL_HASH_EMPTY 0xFFFF
 #define STORE_BLOCK_SHIFT 13
 #define STORE_BLOCK_SIZE 8192
@@ -1167,7 +1168,7 @@ build_stripe_hash_table()
   // estimate allocation
   for (auto &elt : globalVec_stripe) {
     printf("stripe length %" PRId64 "\n", elt->_len.count() * STORE_BLOCK_SIZE);
-    rtable_entries[i] = static_cast<int64_t>(elt->_len / 1024);
+    rtable_entries[i] = static_cast<int64_t>(elt->_len) / Vol_hash_alloc_size;
     rtable_size += rtable_entries[i];
     uint64_t x = elt->hash_id.fold();
     // seed random number generator
