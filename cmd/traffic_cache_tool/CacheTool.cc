@@ -1155,7 +1155,7 @@ void
 build_stripe_hash_table()
 {
   int num_stripes              = globalVec_stripe.size();
-  uint64_t total               = 0;
+  CacheStoreBlocks total;
   unsigned int *forvol         = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
   unsigned int *gotvol         = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
   unsigned int *rnd            = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
@@ -1172,12 +1172,13 @@ build_stripe_hash_table()
     uint64_t x = elt->hash_id.fold();
     // seed random number generator
     rnd[i] = (unsigned int)x;
-    total += ((elt->_len.count() * STORE_BLOCK_SIZE) >> STORE_BLOCK_SHIFT);
+    total += elt->_len;
     i++;
   }
   i = 0;
   for (auto &elt : globalVec_stripe) {
-    forvol[i] = (VOL_HASH_TABLE_SIZE * ((elt->_len.count() * STORE_BLOCK_SIZE) >> STORE_BLOCK_SHIFT)) / total;
+    //forvol[i] = (VOL_HASH_TABLE_SIZE * elt->_len) / total;
+    forvol[i] =static_cast<int64_t>(VOL_HASH_TABLE_SIZE * elt->_len) / total;
     used += forvol[i];
     gotvol[i] = 0;
     i++;
@@ -1384,10 +1385,7 @@ Clear_Spans(int argc, char *argv[])
 
   return zret;
 }
-void
-findAssignment(char *url)
-{
-}
+
 
 Errata
 Find_Stripe(FilePath const &input_file_path)
