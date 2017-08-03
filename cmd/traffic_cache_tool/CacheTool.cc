@@ -1167,7 +1167,7 @@ build_stripe_hash_table()
   // estimate allocation
   for (auto &elt : globalVec_stripe) {
     printf("stripe length %" PRId64 "\n", elt->_len.count() * STORE_BLOCK_SIZE);
-    rtable_entries[i] = elt->_len / 1024;
+    rtable_entries[i] = static_cast<int64_t>(elt->_len / 1024);
     rtable_size += rtable_entries[i];
     uint64_t x = elt->hash_id.fold();
     // seed random number generator
