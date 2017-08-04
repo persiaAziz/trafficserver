@@ -165,7 +165,7 @@ struct Stripe {
 
   int64_t _buckets;  ///< Number of buckets per segment.
   int64_t _segments; ///< Number of segments.
-  const char *hashText = nullptr;
+  std::string hashText = nullptr;
 
   /// Meta copies, indexed by A/B then HEAD/FOOT.
   StripeMeta _meta[2][2];
@@ -1404,7 +1404,7 @@ Find_Stripe(FilePath const &input_file_path)
       ink_code_md5((unsigned char *)host.data(), host.size(), (unsigned char *)&hash);
       Stripe *stripe_ = cache.key_to_stripe(&hash, host.data(), host.size());
       printf("hash of %.*s is %s: Stripe  %s \n", (int)host.size(), host.data(),
-             ink_code_to_hex_str(hashStr, (unsigned char *)&hash), stripe_->hashText);
+             ink_code_to_hex_str(hashStr, (unsigned char *)&hash), stripe_->hashText.data());
     }
   }
 
@@ -1440,9 +1440,7 @@ main(int argc, char *argv[])
     }
   }
 
-  Commands
-    .add("list", "List elements of the cache",
-         []() { return List_Stripes(Cache::SpanDumpDepth::SPAN); })
+  Commands.add("list", "List elements of the cache", []() { return List_Stripes(Cache::SpanDumpDepth::SPAN); })
     .subCommand(std::string("stripes"), std::string("List the stripes"),
                 []() { return List_Stripes(Cache::SpanDumpDepth::STRIPE); });
   Commands.add(std::string("clear"), std::string("Clear spans"), &Clear_Spans);

@@ -48,7 +48,7 @@ public:
   /// Signature for a leaf command.
   using LeafAction = std::function<ts::Errata(int argc, char *argv[])>;
   /// Signature for a argumentless command.
-  using NullaryAction = std::function<ts::Errata ()>;
+  using NullaryAction = std::function<ts::Errata()>;
 
   CommandTable();
 
@@ -59,7 +59,7 @@ public:
   {
     typedef Command self; ///< Self reference type.
   public:
-    Command(Command && that) = default;
+    Command(Command &&that) = default;
     ~Command();
 
     /** Add a subcommand to this command.
@@ -90,60 +90,84 @@ public:
 
     /** Class to hold varying types of functions.
 
-	@internal A bit ugly, I need to do better wrapping and type erasure.
+        @internal A bit ugly, I need to do better wrapping and type erasure.
     */
-    class Action {
+    class Action
+    {
     public:
       /// Type of the function stored.
       enum Type {
-	NIL, ///< Nothing / empty
-	LEAF, ///< Leaf action (arguments)
-	NULLARY, ///< Nullary action.
+        NIL,     ///< Nothing / empty
+        LEAF,    ///< Leaf action (arguments)
+        NULLARY, ///< Nullary action.
       };
-      Action() { }
-      Action(Action && that) {
-	_type = that._type;
-	memcpy(_data, that._data, sizeof(_data));
-	that._type = NIL;
+      Action() {}
+      Action(Action &&that)
+      {
+        _type = that._type;
+        memcpy(_data, that._data, sizeof(_data));
+        that._type = NIL;
       }
       ~Action() { this->clear(); }
 
-      Action& operator = (LeafAction const& a) {
-	this->clear();
-	_type = LEAF;
-	new (_data) LeafAction(a);
-	return *this;
+      Action &
+      operator=(LeafAction const &a)
+      {
+        this->clear();
+        _type = LEAF;
+        new (_data) LeafAction(a);
+        return *this;
       }
 
-      Action& operator = (NullaryAction const& a) {
-	this->clear();
-	_type = NULLARY;
-	new (_data) NullaryAction(a);
-	return *this;
+      Action &
+      operator=(NullaryAction const &a)
+      {
+        this->clear();
+        _type = NULLARY;
+        new (_data) NullaryAction(a);
+        return *this;
       }
 
-      Errata invoke(int argc, char *argv[]) {
-	assert(LEAF == _type);
-	return (*reinterpret_cast<LeafAction*>(_data))(argc, argv);
+      Errata
+      invoke(int argc, char *argv[])
+      {
+        assert(LEAF == _type);
+        return (*reinterpret_cast<LeafAction *>(_data))(argc, argv);
       }
 
-      Errata invoke() {
-	assert(NULLARY == _type);
-	return (*reinterpret_cast<NullaryAction*>(_data))();
+      Errata
+      invoke()
+      {
+        assert(NULLARY == _type);
+        return (*reinterpret_cast<NullaryAction *>(_data))();
       }
 
-      bool is_leaf() const { return LEAF == _type; }
-      bool is_nullary() const { return NULLARY == _type; }
+      bool
+      is_leaf() const
+      {
+        return LEAF == _type;
+      }
+      bool
+      is_nullary() const
+      {
+        return NULLARY == _type;
+      }
 
     protected:
-
-      void clear() {
-	switch (_type) {
-	case NIL: break;
-	case LEAF: reinterpret_cast<LeafAction*>(_data)->~LeafAction(); break;
-	case NULLARY: reinterpret_cast<NullaryAction*>(_data)->~NullaryAction(); break;
-	}
-	_type = NIL;
+      void
+      clear()
+      {
+        switch (_type) {
+        case NIL:
+          break;
+        case LEAF:
+          reinterpret_cast<LeafAction *>(_data)->~LeafAction();
+          break;
+        case NULLARY:
+          reinterpret_cast<NullaryAction *>(_data)->~NullaryAction();
+          break;
+        }
+        _type = NIL;
       }
 
       Type _type = NIL; ///< Type of function stored.
