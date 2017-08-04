@@ -2492,6 +2492,8 @@ Cache::lookup(Continuation *cont, const CacheKey *key, CacheFragType type, const
   }
 
   Vol *vol          = key_to_vol(key, hostname, host_len);
+  char hashStr[33];
+  Debug("Cache","Url: hostname %s assigned vol hashID %s : ID %s",hostname,ink_code_to_hex_str(hashStr, (unsigned char *)&vol->hash_id),vol->hash_text.get());
   ProxyMutex *mutex = cont->mutex.get();
   CacheVC *c        = new_CacheVC(cont);
   SET_CONTINUATION_HANDLER(c, &CacheVC::openReadStartHead);
