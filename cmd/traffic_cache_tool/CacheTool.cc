@@ -54,13 +54,11 @@ using ts::Errata;
 using ts::FilePath;
 using ts::MemView;
 using ts::CacheDirEntry;
-#define VOL_HASH_TABLE_SIZE 32707
-#define VOL_HASH_ALLOC_SIZE (8 * 1024 * 1024) // one chance per this unit
+
+constexpr int VOL_HASH_TABLE_SIZE = 32707;
 CacheStoreBlocks Vol_hash_alloc_size(1024);
-#define VOL_HASH_EMPTY 0xFFFF
-#define STORE_BLOCK_SHIFT 13
-#define STORE_BLOCK_SIZE 8192
-#define DIR_TAG_WIDTH 12
+constexpr unsigned short VOL_HASH_EMPTY=65535;
+constexpr int DIR_TAG_WIDTH=12;
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
 enum { SILENT = 0, NORMAL, VERBOSE } Verbosity = NORMAL;
@@ -204,7 +202,7 @@ Stripe::Stripe(Span *span, Bytes start, CacheStoreBlocks len) : _span(span), _st
   char *hash_text             = static_cast<char *>(ats_malloc(hash_text_size));
   strncpy(hash_text, diskPath, hash_text_size);
   snprintf(hash_text + hash_seed_size, (hash_text_size - hash_seed_size), " %" PRIu64 ":%" PRIu64 "", (uint64_t)_start,
-           (uint64_t)_len.count() * STORE_BLOCK_SIZE);
+           (uint64_t)_len.count());
   printf("hash id of stripe is hash of %s\n", hash_text);
   ink_code_md5((unsigned char *)hash_text, strlen(hash_text), (unsigned char *)&hash_id);
   hashText = hash_text;
@@ -1155,7 +1153,7 @@ next_rand(unsigned int *p)
 void
 build_stripe_hash_table()
 {
-  int num_stripes              = globalVec_stripe.size();
+  int num_stripes = globalVec_stripe.size();
   CacheStoreBlocks total;
   unsigned int *forvol         = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
   unsigned int *gotvol         = (unsigned int *)ats_malloc(sizeof(unsigned int) * num_stripes);
@@ -1167,7 +1165,7 @@ build_stripe_hash_table()
   uint64_t used                = 0;
   // estimate allocation
   for (auto &elt : globalVec_stripe) {
-    printf("stripe length %" PRId64 "\n", elt->_len.count() * STORE_BLOCK_SIZE);
+    // printf("stripe length %" PRId64 "\n", elt->_len.count());
     rtable_entries[i] = static_cast<int64_t>(elt->_len) / Vol_hash_alloc_size;
     rtable_size += rtable_entries[i];
     uint64_t x = elt->hash_id.fold();
@@ -1178,7 +1176,7 @@ build_stripe_hash_table()
   }
   i = 0;
   for (auto &elt : globalVec_stripe) {
-    forvol[i] =static_cast<int64_t>(VOL_HASH_TABLE_SIZE * elt->_len) / total;
+    forvol[i] = static_cast<int64_t>(VOL_HASH_TABLE_SIZE * elt->_len) / total;
     used += forvol[i];
     gotvol[i] = 0;
     i++;
@@ -1385,7 +1383,6 @@ Clear_Spans(int argc, char *argv[])
 
   return zret;
 }
-
 
 Errata
 Find_Stripe(FilePath const &input_file_path)
