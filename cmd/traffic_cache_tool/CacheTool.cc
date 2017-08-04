@@ -57,8 +57,8 @@ using ts::CacheDirEntry;
 
 constexpr int VOL_HASH_TABLE_SIZE = 32707;
 CacheStoreBlocks Vol_hash_alloc_size(1024);
-constexpr unsigned short VOL_HASH_EMPTY=65535;
-constexpr int DIR_TAG_WIDTH=12;
+constexpr unsigned short VOL_HASH_EMPTY = 65535;
+constexpr int DIR_TAG_WIDTH             = 12;
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
 enum { SILENT = 0, NORMAL, VERBOSE } Verbosity = NORMAL;
@@ -74,9 +74,7 @@ ts::CommandTable Commands;
 int OPEN_RW_FLAG = O_RDONLY;
 
 struct Stripe;
-std::vector<Stripe *> globalVec_stripe;
-std::unordered_set<std::string> URLset;
-unsigned short *stripes_hash_table;
+
 struct Span {
   Span(FilePath const &path) : _path(path) {}
   Errata load();
@@ -510,11 +508,16 @@ struct Cache {
   enum class SpanDumpDepth { SPAN, STRIPE, DIRECTORY };
   void dumpSpans(SpanDumpDepth depth);
   void dumpVolumes();
+  void build_stripe_hash_table();
+  Stripe *key_to_stripe(INK_MD5 *key, const char *hostname, int host_len);
   //  ts::CacheStripeBlocks calcTotalSpanPhysicalSize();
   ts::CacheStripeBlocks calcTotalSpanConfiguredSize();
 
   std::list<Span *> _spans;
   std::map<int, Volume> _volumes;
+  std::vector<Stripe *> globalVec_stripe;
+  std::unordered_set<std::string> URLset;
+  unsigned short *stripes_hash_table;
 };
 
 Errata
@@ -1151,7 +1154,7 @@ next_rand(unsigned int *p)
 }
 
 void
-build_stripe_hash_table()
+Cache::build_stripe_hash_table()
 {
   int num_stripes = globalVec_stripe.size();
   CacheStoreBlocks total;
@@ -1231,7 +1234,7 @@ build_stripe_hash_table()
 }
 
 Stripe *
-key_to_stripe(INK_MD5 *key, const char *hostname, int host_len)
+Cache::key_to_stripe(INK_MD5 *key, const char *hostname, int host_len)
 {
   uint32_t h = (key->slice32(2) >> DIR_TAG_WIDTH) % VOL_HASH_TABLE_SIZE;
   return globalVec_stripe[stripes_hash_table[h]];
@@ -1394,12 +1397,12 @@ Find_Stripe(FilePath const &input_file_path)
   cache.loadURLs(input_file_path);
   if ((zret = cache.loadSpan(SpanFile))) {
     cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
-    build_stripe_hash_table();
-    for (auto host : URLset) {
+    cache.build_stripe_hash_table();
+    for (auto host : cache.URLset) {
       INK_MD5 hash;
       char hashStr[33];
       ink_code_md5((unsigned char *)host.data(), host.size(), (unsigned char *)&hash);
-      Stripe *stripe_ = key_to_stripe(&hash, host.data(), host.size());
+      Stripe *stripe_ = cache.key_to_stripe(&hash, host.data(), host.size());
       printf("hash of %.*s is %s: Stripe  %s \n", (int)host.size(), host.data(),
              ink_code_to_hex_str(hashStr, (unsigned char *)&hash), stripe_->hashText);
     }
