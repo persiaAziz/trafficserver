@@ -1405,7 +1405,7 @@ Find_Stripe(FilePath const &input_file_path)
       ink_code_md5((unsigned char *)host.data(), host.size(), (unsigned char *)&hash);
       Stripe *stripe_ = cache.key_to_stripe(&hash, host.data(), host.size());
       printf("hash of %.*s is %s: Stripe  %s \n", (int)host.size(), host.data(),
-             ink_code_to_hex_str(hashStr, (unsigned char *)&hash), stripe_->hashText);
+             ink_code_to_hex_str(hashStr, (unsigned char *)&hash), stripe_->hashText.data());
     }
   }
 
