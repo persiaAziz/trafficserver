@@ -42,7 +42,7 @@ Cache::link(Continuation *cont, const CacheKey *from, const CacheKey *to, CacheF
 
   c->buf = new_IOBufferData(BUFFER_SIZE_INDEX_512);
   char hashStr[33];
-  Debug("Cache","Url: hostname %s assigned vol hashID %s : ID %s",hostname,ink_code_to_hex_str(hashStr, (unsigned char *)&c->vol->hash_id),c->vol->hash_text.get());
+  Debug("cache","Url: hostname %s assigned vol hashID %s : ID %s",hostname,ink_code_to_hex_str(hashStr, (unsigned char *)&c->vol->hash_id),c->vol->hash_text.get());
 #ifdef DEBUG
   Doc *doc = (Doc *)c->buf->data();
   memcpy(doc->data(), to, sizeof(*to)); // doublecheck
@@ -84,10 +84,11 @@ Cache::deref(Continuation *cont, const CacheKey *key, CacheFragType type, const 
   }
 
   ink_assert(caches[type] == this);
-  char hashStr[33];
   Vol *vol = key_to_vol(key, hostname, host_len);
   Dir result;
   Dir *last_collision = nullptr;
+  char hashStr[33];
+  Debug("cache","Url: hostname %s assigned vol hashID %s : ID %s",hostname,ink_code_to_hex_str(hashStr, (unsigned char *)&vol->hash_id),vol->hash_text.get());
   CacheVC *c          = nullptr;
   {
     MUTEX_TRY_LOCK(lock, vol->mutex, cont->mutex->thread_holding);
