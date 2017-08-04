@@ -165,7 +165,7 @@ struct Stripe {
 
   int64_t _buckets;  ///< Number of buckets per segment.
   int64_t _segments; ///< Number of segments.
-  std::string hashText = nullptr;
+  std::string hashText;
 
   /// Meta copies, indexed by A/B then HEAD/FOOT.
   StripeMeta _meta[2][2];
