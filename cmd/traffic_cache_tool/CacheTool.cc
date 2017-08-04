@@ -203,7 +203,7 @@ Stripe::Stripe(Span *span, Bytes start, CacheStoreBlocks len) : _span(span), _st
            (uint64_t)_len.count());
   printf("hash id of stripe is hash of %s\n", hash_text);
   ink_code_md5((unsigned char *)hash_text, strlen(hash_text), (unsigned char *)&hash_id);
-  hashText = hash_text;
+  hashText.assign(hash_text,strlen(hash_text));
 }
 
 bool
