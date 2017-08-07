@@ -1773,8 +1773,10 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
   if (generation != -1) {
     ctx.update(&generation, sizeof(generation));
   }
-  Debug("cache","string to be hashed: %s%d%d",buffer,port,generation);
   ctx.finalize(hash);
+  char hashStr[33];
+  Debug("cache","string to be hashed: %s%d%d => %s",buffer,port,generation, ink_code_to_hex_str(hashStr, (unsigned char *) &hash));
+
 }
 
 void
