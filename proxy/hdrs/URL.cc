@@ -1821,6 +1821,7 @@ url_host_MD5_get(URLImpl *url, INK_MD5 *md5)
   // Especially since it's in_port_t for url_MD5_get.
   int port = url_canonicalize_port(url->m_url_type, url->m_port);
   ctx.update(&port, sizeof(port));
+  Debug("cache","%s://%s:%d",url->m_ptr_scheme,url->m_ptr_host,port);
   ctx.finalize(*md5);
 }
 
