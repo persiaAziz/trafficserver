@@ -43,6 +43,7 @@
 #include <openssl/md5.h>
 #include <vector>
 #include <unordered_set>
+#include <netinet/in.h>
 
 using ts::Bytes;
 using ts::Megabytes;
@@ -1391,6 +1392,19 @@ Clear_Spans(int argc, char *argv[])
 Errata
 Find_Stripe(FilePath const &input_file_path)
 {
+    //scheme=http user=u password=p host=172.28.56.109 path=somepath query=somequery port=1234
+    // url format: scheme://hostname:port/somepath;params?somequery
+    //user, password,path,query,port are optional; scheme and host are required
+    MD5Context ctx;
+    INK_MD5 hashT;
+
+    char hashStr[33];
+    char* h= "http://:@172.28.56.109/file7;?";
+    ctx.update(h,strlen(h));
+    in_port_t port = 5005;
+    ctx.update(&port,sizeof(port));
+    ctx.finalize(hashT);
+    printf("hash is %s: \n", ink_code_to_hex_str(hashStr, (unsigned char *)&hashT));
   Errata zret;
   Cache cache;
   if (input_file_path)
@@ -1401,7 +1415,6 @@ Find_Stripe(FilePath const &input_file_path)
     cache.build_stripe_hash_table();
     for (auto host : cache.URLset) {
       INK_MD5 hash;
-      char hashStr[33];
       ink_code_md5((unsigned char *)host.data(), host.size(), (unsigned char *)&hash);
       Stripe *stripe_ = cache.key_to_stripe(&hash, host.data(), host.size());
       printf("hash of %.*s is %s: Stripe  %s \n", (int)host.size(), host.data(),
