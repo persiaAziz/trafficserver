@@ -1696,7 +1696,7 @@ url_MD5_get_fast(const URLImpl *url, CryptoContext &ctx, CryptoHash *hash, cache
   if (generation != -1) {
     ctx.update(&generation, sizeof(generation));
   }
-
+Debug("cache","fast string to be hashed: %s%d",buffer,generation);
   ctx.finalize(hash);
 }
 
@@ -1772,7 +1772,7 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
   if (generation != -1) {
     ctx.update(&generation, sizeof(generation));
   }
-
+  Debug("cache","string to be hashed: %s%d%d",buffer,port,generation);
   ctx.finalize(hash);
 }
 
