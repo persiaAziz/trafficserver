@@ -1696,8 +1696,9 @@ url_MD5_get_fast(const URLImpl *url, CryptoContext &ctx, CryptoHash *hash, cache
   if (generation != -1) {
     ctx.update(&generation, sizeof(generation));
   }
-Debug("cache","fast string to be hashed: %s%d",buffer,generation);
   ctx.finalize(hash);
+  char hashStr[33];
+  Debug("cache","fast string to be hashed: %s%d => %s",buffer,generation,ink_code_to_hex_str(hashStr, (unsigned char *)&hash));
 }
 
 static inline void
