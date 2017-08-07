@@ -1756,6 +1756,8 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
         }
 
         if (p == e) {
+            char hashStr[33];
+            Debug("cache","p==e string to be hashed: %s%d%d => %s",buffer,port,generation, ink_code_to_hex_str(hashStr, (unsigned char *) &hash));
           ctx.update(buffer, BUFSIZE);
           p = buffer;
         }
@@ -1764,6 +1766,8 @@ url_MD5_get_general(const URLImpl *url, CryptoContext &ctx, CryptoHash &hash, ca
   }
 
   if (p != buffer) {
+      char hashStr[33];
+      Debug("cache","p!=buffer string to be hashed: %s%d%d => %s",buffer,port,generation, ink_code_to_hex_str(hashStr, (unsigned char *) &hash));
     ctx.update(buffer, p - buffer);
   }
 
