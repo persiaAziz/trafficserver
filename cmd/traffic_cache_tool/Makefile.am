@@ -31,6 +31,7 @@ traffic_cache_tool_LDADD = \
 	$(top_builddir)/lib/ts/.libs/ink_assert.o \
 	$(top_builddir)/lib/ts/.libs/ink_code.o \
 	$(top_builddir)/lib/tsconfig/.libs/Errata.o \
-	@OPENSSL_LIBS@
+	$(top_builddir)/lib/ts/.libs/Regex.o \
+	@OPENSSL_LIBS@ @LIBPCRE@
 
 all-am: Makefile $(PROGRAMS)

@@ -42,25 +42,26 @@ ERR_COMMAND_TAG_NOT_FOUND(char const *tag)
   return ts::Errata(s.str());
 }
 
-CommandTable::Command::Command() {}
+CommandTable::Command::Command()
+{
+}
 
 CommandTable::Command::Command(std::string const &name, std::string const &help) : _name(name), _help(help)
 {
 }
 
-CommandTable::Command::Command(std::string const &name, std::string const &help, LeafAction const &f)
-  : _name(name), _help(help)
+CommandTable::Command::Command(std::string const &name, std::string const &help, LeafAction const &f) : _name(name), _help(help)
 {
   _action = f;
 }
 
-CommandTable::Command::Command(std::string const &name, std::string const &help, NullaryAction const &f)
-  : _name(name), _help(help)
+CommandTable::Command::Command(std::string const &name, std::string const &help, NullaryAction const &f) : _name(name), _help(help)
 {
   _action = f;
 }
 
-CommandTable::Command::~Command() {
+CommandTable::Command::~Command()
+{
 }
 
 CommandTable::Command &

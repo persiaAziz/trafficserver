@@ -43,7 +43,6 @@
 #include <openssl/md5.h>
 #include <vector>
 #include <unordered_set>
-#include <netinet/in.h>
 
 using ts::Bytes;
 using ts::Megabytes;
@@ -205,7 +204,7 @@ Stripe::Stripe(Span *span, Bytes start, CacheStoreBlocks len) : _span(span), _st
            (uint64_t)_len.count());
   printf("hash id of stripe is hash of %s\n", hash_text);
   ink_code_md5((unsigned char *)hash_text, strlen(hash_text), (unsigned char *)&hash_id);
-  hashText.assign(hash_text,strlen(hash_text));
+  hashText.assign(hash_text, strlen(hash_text));
 }
 
 bool
@@ -823,7 +822,7 @@ Errata
 Cache::loadURLs(FilePath const &path)
 {
   static const ts::StringView TAG_VOL("url");
-
+  ts::URLparser parser;
   Errata zret;
 
   ts::BulkFile cfile(path);
@@ -838,6 +837,8 @@ Cache::loadURLs(FilePath const &path)
       } else if (0 == strcasecmp(tag, TAG_VOL)) {
         std::string url;
         url.assign(blob.begin(), blob.size());
+        int port = parser.getPort(url);
+        std::cout << "port # " << port << std::endl;
         URLset.insert(url);
       }
     }
@@ -1392,19 +1393,25 @@ Clear_Spans(int argc, char *argv[])
 Errata
 Find_Stripe(FilePath const &input_file_path)
 {
-    //scheme=http user=u password=p host=172.28.56.109 path=somepath query=somequery port=1234
-    // url format: scheme://hostname:port/somepath;params?somequery
-    //user, password,path,query,port are optional; scheme and host are required
-    MD5Context ctx;
-    INK_MD5 hashT;
+  // scheme=http user=u password=p host=172.28.56.109 path=somepath query=somequery port=1234
+  // input file format: scheme://hostname:port/somepath;params?somequery user=USER password=PASS
+  // user, password, are optional; scheme and host are required
+  MD5Context ctx;
+  INK_MD5 hashT;
 
-    char hashStr[33];
-    char* h= "http://:@172.28.56.109/file7;?";
-    ctx.update(h,strlen(h));
-    in_port_t port = 5005;
-    ctx.update(&port,sizeof(port));
-    ctx.finalize(hashT);
-    printf("hash is %s: \n", ink_code_to_hex_str(hashStr, (unsigned char *)&hashT));
+  char hashStr[33];
+  char *h = "https://ss.ss.@@s.ss:900/jhfjhgsfgnn";
+  // char* h= "http://:@172.28.56.109/file7;?"port      <== this is the format we need
+  url_matcher matcher;
+  if (matcher.match(h))
+    std::cout << h << " : is valid" << std::endl;
+  else
+    std::cout << h << " : is NOT valid" << std::endl;
+  ctx.update(h, strlen(h));
+  in_port_t port = 5005;
+  ctx.update(&port, sizeof(port));
+  ctx.finalize(hashT);
+  printf("hash is %s: \n", ink_code_to_hex_str(hashStr, (unsigned char *)&hashT));
   Errata zret;
   Cache cache;
   if (input_file_path)
@@ -1423,6 +1430,42 @@ Find_Stripe(FilePath const &input_file_path)
   }
 
   return zret;
+}
+
+bool
+ts::URLparser::verifyURL(std::string &url1)
+{
+}
+
+int
+ts::URLparser::getPort(std::string &fullURL)
+{
+  url_matcher matcher;
+  static const ts::StringView HTTP("http");
+  static const ts::StringView HTTPS("https");
+  ts::StringView url(fullURL.data(), (int)fullURL.size());
+  // check for scheme
+  ts::StringView scheme = url.splitPrefix(':');
+  if ((strcasecmp(scheme, HTTP) == 0) || (strcasecmp(scheme, HTTPS) == 0)) {
+    url += 2;
+    ts::StringView hostPort = url.splitPrefix(':');
+    if (hostPort) // i.e. port is present
+    {
+      ts::StringView port = url.splitPrefix('/');
+      if (!port) // i.e. backslash is not present, then the rest of url must be just port
+        port = url;
+      if (matcher.portmatch(port.begin(), port.size())) {
+        ts::StringView text;
+        auto n = ts::svtoi(port, &text);
+        if (text == port)
+          return n;
+      }
+    }
+    return -1;
+  } else {
+    std::cout << "No scheme provided for: " << scheme.begin() << std::endl;
+    return -1;
+  }
 }
 
 int
@@ -1454,9 +1497,7 @@ main(int argc, char *argv[])
     }
   }
 
-  Commands
-    .add("list", "List elements of the cache",
-         []() { return List_Stripes(Cache::SpanDumpDepth::SPAN); })
+  Commands.add("list", "List elements of the cache", []() { return List_Stripes(Cache::SpanDumpDepth::SPAN); })
     .subCommand(std::string("stripes"), std::string("List the stripes"),
                 []() { return List_Stripes(Cache::SpanDumpDepth::STRIPE); });
   Commands.add(std::string("clear"), std::string("Clear spans"), &Clear_Spans);

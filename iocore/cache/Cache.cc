@@ -2491,9 +2491,10 @@ Cache::lookup(Continuation *cont, const CacheKey *key, CacheFragType type, const
     return ACTION_RESULT_DONE;
   }
 
-  Vol *vol          = key_to_vol(key, hostname, host_len);
+  Vol *vol = key_to_vol(key, hostname, host_len);
   char hashStr[33];
-  Debug("cache","Url: hostname %.*s assigned vol hashID %s : ID %s",host_len,hostname,ink_code_to_hex_str(hashStr, (unsigned char *)&vol->hash_id),vol->hash_text.get());
+  Debug("cache", "Url: hostname %.*s assigned vol hashID %s : ID %s", host_len, hostname,
+        ink_code_to_hex_str(hashStr, (unsigned char *)&vol->hash_id), vol->hash_text.get());
   ProxyMutex *mutex = cont->mutex.get();
   CacheVC *c        = new_CacheVC(cont);
   SET_CONTINUATION_HANDLER(c, &CacheVC::openReadStartHead);
@@ -2614,7 +2615,8 @@ Cache::remove(Continuation *cont, const CacheKey *key, CacheFragType type, const
   ink_assert(lock.is_locked());
   Vol *vol = key_to_vol(key, hostname, host_len);
   char hashStr[33];
-  Debug("cache","Url: hostname %.*s assigned vol hashID %s : ID %s",host_len,hostname,ink_code_to_hex_str(hashStr, (unsigned char *)&vol->hash_id),vol->hash_text.get());
+  Debug("cache", "Url: hostname %.*s assigned vol hashID %s : ID %s", host_len, hostname,
+        ink_code_to_hex_str(hashStr, (unsigned char *)&vol->hash_id), vol->hash_text.get());
   // coverity[var_decl]
   Dir result;
   dir_clear(&result); // initialized here, set result empty so we can recognize missed lock

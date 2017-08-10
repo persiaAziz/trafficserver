@@ -25,7 +25,8 @@
 #define CACHE_DEFS_H
 #include <ts/I_Version.h>
 #include <ts/Scalar.h>
-
+#include <netinet/in.h>
+#include <ts/Regex.h>
 namespace tag
 {
 struct bytes {
@@ -186,6 +187,66 @@ class CacheDirEntry
 class CacheVolume
 {
 };
+
+class URLparser
+{
+public:
+  bool verifyURL(std::string &url1);
+  void parseURL();
+  int getPort(std::string &fullURL);
+
+private:
+  //   DFA regex;
+};
+
+class CacheURL
+{
+};
 }
+
+class DFA;
+// this class matches url of the format : scheme://hostname:port/path;params?query
+struct url_matcher {
+  // R"(^https?\:\/\/^[a-z A-Z 0-9]\.[a-z A-Z 0-9 \.]+)"
+  url_matcher()
+  {
+    /*if (regex.compile(R"(^https?\:\/\/^[a-z A-Z 0-9][\. a-z A-Z 0-9 ]+(\:[0-9]\/)?.*))") != 0) {
+        std::cout<<"Check your regular expression"<<std::endl;
+    }*/
+    //  (\w+\:[\w\W]+\@)? (:[0-9]+)?(\/.*)
+    if (regex.compile(R"(^(https?\:\/\/)[A-Za-z0-9]+(\.[A-Za-z0-9]+)*(\:[0-9]+)?(^\/[\w\W]*)?)") != 0) {
+      std::cout << "Check your regular expression" << std::endl;
+      return;
+    }
+    if (port.compile(R"([0-9]+$)") != 0) {
+      std::cout << "Check your regular expression" << std::endl;
+      return;
+    }
+  }
+
+  ~url_matcher() {}
+  uint8_t
+  match(const char *hostname) const
+  {
+    if (regex.match(hostname) != -1)
+      return 1;
+    //   if(url_with_user.match(hostname) != -1)
+    //       return 2;
+    return 0;
+  }
+  uint8_t
+  portmatch(const char *hostname, int length) const
+  {
+    if (port.match(hostname, length) != -1)
+      return 1;
+    //   if(url_with_user.match(hostname) != -1)
+    //       return 2;
+    return 0;
+  }
+
+private:
+  DFA port;
+  DFA regex;
+};
 
 #endif // CACHE_DEFS_H
