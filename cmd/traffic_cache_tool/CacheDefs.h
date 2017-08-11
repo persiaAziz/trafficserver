@@ -21,12 +21,15 @@
   limitations under the License.
  */
 
-#if !defined(CACHE_DEFS_H)
+#ifndef CACHE_DEFS_H
 #define CACHE_DEFS_H
 #include <ts/I_Version.h>
 #include <ts/Scalar.h>
 #include <netinet/in.h>
 #include <ts/Regex.h>
+#include <ts/MemView.h>
+#include "tsconfig/Errata.h"
+#include <iostream>
 namespace tag
 {
 struct bytes {
@@ -50,32 +53,6 @@ typedef Scalar<1024 * Kilobytes::SCALE, off_t, tag::bytes> Megabytes;
 typedef Scalar<1024 * Megabytes::SCALE, off_t, tag::bytes> Gigabytes;
 typedef Scalar<1024 * Gigabytes::SCALE, off_t, tag::bytes> Terabytes;
 
-std::ostream &
-operator<<(std::ostream &s, Bytes const &n)
-{
-  return s << n.count() << " bytes";
-}
-std::ostream &
-operator<<(std::ostream &s, Kilobytes const &n)
-{
-  return s << n.count() << " KB";
-}
-std::ostream &
-operator<<(std::ostream &s, Megabytes const &n)
-{
-  return s << n.count() << " MB";
-}
-std::ostream &
-operator<<(std::ostream &s, Gigabytes const &n)
-{
-  return s << n.count() << " GB";
-}
-std::ostream &
-operator<<(std::ostream &s, Terabytes const &n)
-{
-  return s << n.count() << " TB";
-}
-
 // Units of allocation for stripes.
 typedef Scalar<128 * Megabytes::SCALE, int64_t, tag::bytes> CacheStripeBlocks;
 // Size measurement of cache storage.
@@ -83,22 +60,6 @@ typedef Scalar<128 * Megabytes::SCALE, int64_t, tag::bytes> CacheStripeBlocks;
 typedef Scalar<8 * Kilobytes::SCALE, int64_t, tag::bytes> CacheStoreBlocks;
 // Size unit for content stored in cache.
 typedef Scalar<512, int64_t, tag::bytes> CacheDataBlocks;
-
-std::ostream &
-operator<<(std::ostream &s, CacheStripeBlocks const &n)
-{
-  return s << n.count() << " stripe blocks";
-}
-std::ostream &
-operator<<(std::ostream &s, CacheStoreBlocks const &n)
-{
-  return s << n.count() << " store blocks";
-}
-std::ostream &
-operator<<(std::ostream &s, CacheDataBlocks const &n)
-{
-  return s << n.count() << " data blocks";
-}
 
 /** A cache span is a representation of raw storage.
     It corresponds to a raw disk, disk partition, file, or directory.
@@ -149,6 +110,7 @@ struct SpanHeader {
 
     @internal nee VolHeadFooter
  */
+// the counterpart of this structure in ATS is called VolHeaderFooter
 class StripeMeta
 {
 public:
@@ -168,10 +130,18 @@ public:
   uint32_t dirty;
   uint32_t sector_size;
   uint32_t unused; // pad out to 8 byte boundary
+  uint16_t freelist[1];
 };
+
+/*
+ @internal struct Dir in P_CacheDir.h
+ * size: 10bytes
+ */
 
 class CacheDirEntry
 {
+public:
+#if 0
   unsigned int offset : 24;
   unsigned int big : 2;
   unsigned int size : 6;
@@ -182,6 +152,9 @@ class CacheDirEntry
   unsigned int token : 1;
   unsigned int next : 16;
   uint16_t offset_high;
+#else
+  uint16_t w[5];
+#endif
 };
 
 class CacheVolume
@@ -192,8 +165,8 @@ class URLparser
 {
 public:
   bool verifyURL(std::string &url1);
-  void parseURL();
-  int getPort(std::string &fullURL);
+  Errata parseURL(StringView URI);
+  int getPort(std::string &fullURL, int &port_ptr, int &port_len);
 
 private:
   //   DFA regex;
@@ -201,6 +174,40 @@ private:
 
 class CacheURL
 {
+public:
+  in_port_t port;
+  std::string scheme;
+  std::string url;
+  std::string hostname;
+  std::string path;
+  std::string query;
+  std::string params;
+  std::string fragments;
+  std::string user;
+  std::string password;
+  CacheURL(int port_, ts::StringView b_hostname, ts::StringView b_path, ts::StringView b_params, ts::StringView b_query,
+           ts::StringView b_fragments)
+  {
+    hostname.assign(b_hostname.begin(), b_hostname.size());
+    port = port_;
+    path.assign(b_path.begin(), b_path.size());
+    params.assign(b_params.begin(), b_params.size());
+    query.assign(b_query.begin(), b_query.size());
+    fragments.assign(b_fragments.begin(), b_fragments.size());
+  }
+
+  CacheURL(ts::StringView blob, int port_)
+  {
+    url.assign(blob.begin(), blob.size());
+    port = port_;
+  }
+
+  void
+  setCredential(char *p_user, int user_len, char *p_pass, int pass_len)
+  {
+    user.assign(p_user, user_len);
+    password.assign(p_pass, pass_len);
+  }
 };
 }
 
@@ -214,7 +221,7 @@ struct url_matcher {
         std::cout<<"Check your regular expression"<<std::endl;
     }*/
     //  (\w+\:[\w\W]+\@)? (:[0-9]+)?(\/.*)
-    if (regex.compile(R"(^(https?\:\/\/)[A-Za-z0-9]+(\.[A-Za-z0-9]+)*(\:[0-9]+)?(^\/[\w\W]*)?)") != 0) {
+    if (regex.compile(R"(^(https?\:\/\/)") != 0) {
       std::cout << "Check your regular expression" << std::endl;
       return;
     }

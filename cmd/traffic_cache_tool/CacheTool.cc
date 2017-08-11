@@ -28,7 +28,6 @@
 #include <map>
 #include <ts/ink_memory.h>
 #include <ts/ink_file.h>
-#include <ts/MemView.h>
 #include <getopt.h>
 #include <system_error>
 #include <string.h>
@@ -59,6 +58,13 @@ constexpr int VOL_HASH_TABLE_SIZE = 32707;
 CacheStoreBlocks Vol_hash_alloc_size(1024);
 constexpr unsigned short VOL_HASH_EMPTY = 65535;
 constexpr int DIR_TAG_WIDTH             = 12;
+constexpr int DIR_DEPTH                 = 4;
+constexpr int SIZEOF_DIR                = 10;
+constexpr int MAX_ENTRIES_PER_SEGMENT   = (1 << 16);
+constexpr int DIR_SIZE_WIDTH            = 6;
+constexpr int DIR_BLOCK_SIZES           = 4;
+constexpr int CACHE_BLOCK_SHIFT         = 9;
+constexpr int CACHE_BLOCK_SIZE          = (1 << CACHE_BLOCK_SHIFT); // 512, smallest sector size
 const Bytes ts::CacheSpan::OFFSET{CacheStoreBlocks{1}};
 
 enum { SILENT = 0, NORMAL, VERBOSE } Verbosity = NORMAL;
@@ -150,6 +156,7 @@ struct Stripe {
 
   /// Load metadata for this stripe.
   Errata loadMeta();
+  void dir_check();
 
   /// Initialize the live data from the loaded serialized data.
   void updateLiveData(enum Copy c);
@@ -162,6 +169,7 @@ struct Stripe {
   uint8_t _vol_idx = 0;  ///< Volume index.
   uint8_t _type    = 0;  ///< Stripe type.
   int8_t _idx      = -1; ///< Stripe index in span.
+  int agg_buf_pos  = 0;
 
   int64_t _buckets;  ///< Number of buckets per segment.
   int64_t _segments; ///< Number of segments.
@@ -174,6 +182,7 @@ struct Stripe {
   CacheStoreBlocks _meta_pos[2][2];
   /// Directory.
   Chunk _directory;
+  CacheDirEntry const *dir = nullptr;
 };
 
 Stripe::Chunk::~Chunk()
@@ -265,6 +274,328 @@ Stripe::updateLiveData(enum Copy c)
   _directory._skip = header_len;
 }
 
+/* INK_ALIGN() is only to be used to align on a power of 2 boundary */
+#define INK_ALIGN(size, boundary) (((size) + ((boundary)-1)) & ~((boundary)-1))
+
+#define ROUND_TO_STORE_BLOCK(_x) INK_ALIGN((_x), 8192)
+
+TS_INLINE int
+vol_headerlen(Stripe *d)
+{
+  return ROUND_TO_STORE_BLOCK(sizeof(CacheDirEntry) + sizeof(uint16_t) * (d->_segments - 1));
+}
+
+size_t
+vol_dirlen(Stripe *d)
+{
+  return vol_headerlen(d) + ROUND_TO_STORE_BLOCK(((size_t)d->_buckets) * DIR_DEPTH * d->_segments * SIZEOF_DIR) +
+         ROUND_TO_STORE_BLOCK(sizeof(CacheDirEntry));
+}
+
+#define dir_big(_e) ((uint32_t)((((_e)->w[1]) >> 8) & 0x3))
+#define dir_bit(_e, _w, _b) ((uint32_t)(((_e)->w[_w] >> (_b)) & 1))
+#define dir_size(_e) ((uint32_t)(((_e)->w[1]) >> 10))
+#define dir_approx_size(_e) ((dir_size(_e) + 1) * DIR_BLOCK_SIZE(dir_big(_e)))
+#define dir_head(_e) dir_bit(_e, 2, 13)
+#define dir_valid(_d, _e) (_d->_meta[0][0].phase == dir_phase(_e) ? vol_in_phase_valid(_d, _e) : vol_out_of_phase_valid(_d, _e))
+#define dir_tag(_e) ((uint32_t)((_e)->w[2] & ((1 << DIR_TAG_WIDTH) - 1)))
+#define dir_offset(_e) \
+  ((int64_t)(((uint64_t)(_e)->w[0]) | (((uint64_t)((_e)->w[1] & 0xFF)) << 16) | (((uint64_t)(_e)->w[4]) << 24)))
+#define dir_set_offset(_e, _o)                                              \
+  do {                                                                      \
+    (_e)->w[0] = (uint16_t)_o;                                              \
+    (_e)->w[1] = (uint16_t)((((_o) >> 16) & 0xFF) | ((_e)->w[1] & 0xFF00)); \
+    (_e)->w[4] = (uint16_t)((_o) >> 24);                                    \
+  } while (0)
+#define dir_segment(_s, _d) vol_dir_segment(_d, _s)
+#define dir_in_seg(_s, _i) ((CacheDirEntry *)(((char *)(_s)) + (SIZEOF_DIR * (_i))))
+#define dir_next(_e) (_e)->w[3]
+#define dir_phase(_e) dir_bit(_e, 2, 12)
+#define DIR_BLOCK_SHIFT(_i) (3 * (_i))
+#define DIR_BLOCK_SIZE(_i) (CACHE_BLOCK_SIZE << DIR_BLOCK_SHIFT(_i))
+#define dir_set_prev(_e, _o) (_e)->w[2] = (uint16_t)(_o)
+#define dir_set_next(_e, _o) (_e)->w[3] = (uint16_t)(_o)
+
+TS_INLINE CacheDirEntry *
+vol_dir_segment(Stripe *d, int s)
+{
+  return (CacheDirEntry *)((d->dir + d->_directory._skip) + (s * d->_buckets) * DIR_DEPTH * SIZEOF_DIR);
+}
+
+TS_INLINE CacheDirEntry *
+dir_bucket(int64_t b, CacheDirEntry *seg)
+{
+  return dir_in_seg(seg, b * DIR_DEPTH);
+}
+
+TS_INLINE CacheDirEntry *
+dir_from_offset(int64_t i, CacheDirEntry *seg)
+{
+#if DIR_DEPTH < 5
+  if (!i)
+    return 0;
+  return dir_in_seg(seg, i);
+#else
+  i = i + ((i - 1) / (DIR_DEPTH - 1));
+  return dir_in_seg(seg, i);
+#endif
+}
+
+TS_INLINE int
+vol_in_phase_valid(Stripe *d, CacheDirEntry *e)
+{
+  return (dir_offset(e) - 1 < ((d->_meta[0][0].write_pos + d->agg_buf_pos - d->_start) / CACHE_BLOCK_SIZE));
+}
+
+TS_INLINE int
+vol_out_of_phase_valid(Stripe *d, CacheDirEntry *e)
+{
+  return (dir_offset(e) - 1 >= ((d->_meta[0][0].agg_pos - d->_start) / CACHE_BLOCK_SIZE));
+}
+
+TS_INLINE CacheDirEntry *
+next_dir(CacheDirEntry *d, CacheDirEntry *seg)
+{
+  int i = dir_next(d);
+  return dir_from_offset(i, seg);
+}
+#define dir_offset(_e) \
+  ((int64_t)(((uint64_t)(_e)->w[0]) | (((uint64_t)((_e)->w[1] & 0xFF)) << 16) | (((uint64_t)(_e)->w[4]) << 24)))
+
+TS_INLINE CacheDirEntry *
+dir_bucket_row(CacheDirEntry *b, int64_t i)
+{
+  return dir_in_seg(b, i);
+}
+
+TS_INLINE int64_t
+dir_to_offset(const CacheDirEntry *d, const CacheDirEntry *seg)
+{
+#if DIR_DEPTH < 5
+  return (((char *)d) - ((char *)seg)) / SIZEOF_DIR;
+#else
+  int64_t i = (int64_t)((((char *)d) - ((char *)seg)) / SIZEOF_DIR);
+  i         = i - (i / DIR_DEPTH);
+  return i;
+#endif
+}
+
+void
+dir_free_entry(CacheDirEntry *e, int s, Stripe *d)
+{
+  CacheDirEntry *seg = dir_segment(s, d);
+  unsigned int fo    = d->_meta[0][0].freelist[s];
+  unsigned int eo    = dir_to_offset(e, seg);
+  dir_set_next(e, fo);
+  if (fo) {
+    dir_set_prev(dir_from_offset(fo, seg), eo);
+  }
+  d->_meta[0][0].freelist[s] = eo;
+}
+
+// adds all the directory entries
+// in a segment to the segment freelist
+void
+dir_init_segment(int s, Stripe *d)
+{
+  d->_meta[0][0].freelist[s] = 0;
+  CacheDirEntry *seg         = dir_segment(s, d);
+  int l, b;
+  memset(seg, 0, SIZEOF_DIR * DIR_DEPTH * d->_buckets);
+  for (l = 1; l < DIR_DEPTH; l++) {
+    for (b = 0; b < d->_buckets; b++) {
+      CacheDirEntry *bucket = dir_bucket(b, seg);
+      dir_free_entry(dir_bucket_row(bucket, l), s, d);
+    }
+  }
+}
+
+//
+// Cache Directory
+//
+
+// return value 1 means no loop
+// zero indicates loop
+int
+dir_bucket_loop_check(CacheDirEntry *start_dir, CacheDirEntry *seg)
+{
+  if (start_dir == nullptr) {
+    return 1;
+  }
+
+  CacheDirEntry *p1 = start_dir;
+  CacheDirEntry *p2 = start_dir;
+
+  while (p2) {
+    // p1 moves by one entry per iteration
+    assert(p1);
+    p1 = next_dir(p1, seg);
+    // p2 moves by two entries per iteration
+    p2 = next_dir(p2, seg);
+    if (p2) {
+      p2 = next_dir(p2, seg);
+    } else {
+      return 1;
+    }
+
+    if (p2 == p1) {
+      return 0; // we have a loop
+    }
+  }
+  return 1;
+}
+
+// break the infinite loop in directory entries
+// Note : abuse of the token bit in dir entries
+
+int
+dir_bucket_loop_fix(CacheDirEntry *start_dir, int s, Stripe *d)
+{
+  if (!dir_bucket_loop_check(start_dir, dir_segment(s, d))) {
+    dir_init_segment(s, d);
+    return 1;
+  }
+  return 0;
+}
+
+int
+dir_freelist_length(Stripe *d, int s)
+{
+  int free           = 0;
+  CacheDirEntry *seg = dir_segment(s, d);
+  //TODO: check freelist[s]; ATS passes s to freelist, I don't know how that works -_-
+  CacheDirEntry *e   = dir_from_offset(d->_meta[0][0].freelist[0], seg);
+  if (dir_bucket_loop_fix(e, s, d)) {
+    return (DIR_DEPTH - 1) * d->_buckets;
+  }
+  while (e) {
+    free++;
+    e = next_dir(e, seg);
+  }
+  return free;
+}
+
+int
+compare_ushort(void const *a, void const *b)
+{
+  return *static_cast<unsigned short const *>(a) - *static_cast<unsigned short const *>(b);
+}
+
+void
+Stripe::dir_check()
+{
+  static int const SEGMENT_HISTOGRAM_WIDTH = 16;
+  int hist[SEGMENT_HISTOGRAM_WIDTH + 1]    = {0};
+  unsigned short chain_tag[MAX_ENTRIES_PER_SEGMENT];
+  int32_t chain_mark[MAX_ENTRIES_PER_SEGMENT];
+
+  this->loadMeta();
+  // create raw_dir;
+  char *raw_dir          = (char *)ats_memalign(ats_pagesize(), vol_dirlen(this)-vol_headerlen(this)-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
+  dir                    = (CacheDirEntry *)raw_dir;
+  uint64_t total_buckets = _segments * _buckets;
+  uint64_t total_entries = total_buckets * DIR_DEPTH;
+  int frag_demographics[1 << DIR_SIZE_WIDTH][DIR_BLOCK_SIZES];
+  int j;
+  int stale = 0, in_use = 0, empty = 0;
+  int free = 0, head = 0, buckets_in_use = 0;
+
+  int max_chain_length = 0;
+  int64_t bytes_in_use = 0;
+  std::cout << "Stripe '[" << hashText << "]'" << std::endl;
+  std::cout << "  Directory Bytes: " << _segments * _buckets * SIZEOF_DIR << std::endl;
+  std::cout << "  Segments:  " << _segments << std::endl;
+  std::cout << "  Buckets per segment:  " << _buckets << std::endl;
+  std::cout << "  Entries:  " << _segments * _buckets * DIR_DEPTH << std::endl;
+  int fd = _span->_fd;
+  //read directory
+  pread(fd, raw_dir, vol_dirlen(this)-vol_headerlen(this)-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), vol_headerlen(this));
+  for (int s = 0; s < _segments; s++) {
+    CacheDirEntry *seg     = dir_segment(s, this);
+    int seg_chain_max      = 0;
+    int seg_empty          = 0;
+    int seg_in_use         = 0;
+    int seg_stale          = 0;
+    int seg_bytes_in_use   = 0;
+    int seg_dups           = 0;
+    int seg_buckets_in_use = 0;
+
+    ink_zero(chain_tag);
+    memset(chain_mark, -1, sizeof(chain_mark));
+    for (int b = 0; b < _buckets; b++) {
+      CacheDirEntry *root = dir_bucket(b, seg);
+      int h               = 0;
+      int chain_idx       = 0;
+      int mark            = 0;
+      ++seg_buckets_in_use;
+      // walking through the directories
+      for (CacheDirEntry *e = root; e; e = next_dir(e, seg)) {
+        if (!dir_offset(e)) {
+          ++seg_empty;
+          --seg_buckets_in_use;
+          // this should only happen on the first dir in a bucket
+          assert(nullptr == next_dir(e, seg));
+          break;
+        } else {
+          int e_idx = e - seg;
+          ++h;
+          chain_tag[chain_idx++] = dir_tag(e);
+          if (chain_mark[e_idx] == mark) {
+            printf("    - Cycle of length %d detected for bucket %d\n", h, b);
+          } else if (chain_mark[e_idx] >= 0) {
+            printf("    - Entry %d is in chain %d and %d", e_idx, chain_mark[e_idx], mark);
+          } else {
+            chain_mark[e_idx] = mark;
+          }
+
+          if (!dir_valid(this, e)) {
+            ++seg_stale;
+          } else {
+            uint64_t size = dir_approx_size(e);
+            if (dir_head(e)) {
+              ++head;
+            }
+            ++seg_in_use;
+            seg_bytes_in_use += size;
+            ++frag_demographics[dir_size(e)][dir_big(e)];
+          }
+        }
+        e = next_dir(e, seg);
+        if (!e) {
+          break;
+        }
+      }
+
+      // Check for duplicates (identical tags in the same bucket).
+      if (h > 1) {
+        unsigned short last;
+        qsort(chain_tag, h, sizeof(chain_tag[0]), &compare_ushort);
+        last = chain_tag[0];
+        for (int k = 1; k < h; ++k) {
+          if (last == chain_tag[k]) {
+            ++seg_dups;
+          }
+          last = chain_tag[k];
+        }
+      }
+      ++hist[std::min(h, SEGMENT_HISTOGRAM_WIDTH)];
+      seg_chain_max = std::max(seg_chain_max, h);
+    }
+    int fl_size = dir_freelist_length(this, s);
+    in_use += seg_in_use;
+    empty += seg_empty;
+    stale += seg_stale;
+    free += fl_size;
+    buckets_in_use += seg_buckets_in_use;
+    max_chain_length = std::max(max_chain_length, seg_chain_max);
+    bytes_in_use += seg_bytes_in_use;
+
+    printf("  - Segment-%d | Entries: used=%d stale=%d free=%d disk-bytes=%d Buckets: used=%d empty=%d max=%d avg=%.2f dups=%d\n",
+           s, seg_in_use, seg_stale, fl_size, seg_bytes_in_use, seg_buckets_in_use, seg_empty, seg_chain_max,
+           seg_buckets_in_use ? static_cast<float>(seg_in_use + seg_stale) / seg_buckets_in_use : 0.0, seg_dups);
+  }
+}
+
 Errata
 Stripe::loadMeta()
 {
@@ -303,6 +634,8 @@ Stripe::loadMeta()
   n.assign(pread(fd, stripe_buff, SBSIZE, pos));
   data.setView(stripe_buff, n);
   meta = data.template at_ptr<StripeMeta>(0);
+  // TODO:: We need to read more data at this point  to populate dir
+  dir = data.template at_ptr<CacheDirEntry>(vol_headerlen(this));
   if (this->validateMeta(meta)) {
     delta              = Bytes(data.template at_ptr<char>(0) - stripe_buff);
     _meta[A][HEAD]     = *meta;
@@ -517,7 +850,7 @@ struct Cache {
   std::list<Span *> _spans;
   std::map<int, Volume> _volumes;
   std::vector<Stripe *> globalVec_stripe;
-  std::unordered_set<std::string> URLset;
+  std::unordered_set<ts::CacheURL *> URLset;
   unsigned short *stripes_hash_table;
 };
 
@@ -837,9 +1170,13 @@ Cache::loadURLs(FilePath const &path)
       } else if (0 == strcasecmp(tag, TAG_VOL)) {
         std::string url;
         url.assign(blob.begin(), blob.size());
-        int port = parser.getPort(url);
-        std::cout << "port # " << port << std::endl;
-        URLset.insert(url);
+        int port_ptr = -1, port_len = -1;
+        int port = parser.getPort(url, port_ptr, port_len);
+        if (port_ptr >= 0 && port_len > 0)
+          url.erase(port_ptr, port_len + 1); // get rid of :PORT
+        std::cout << "port # " << port << ":" << port_ptr << ":" << port_len << ":" << url << std::endl;
+        ts::CacheURL *curl = new ts::CacheURL(url, port);
+        URLset.emplace(curl);
       }
     }
   } else {
@@ -1323,7 +1660,8 @@ VolumeConfig::load(FilePath const &path)
 }
 /* --------------------------------------------------------------------------------------- */
 struct option Options[] = {{"help", 0, nullptr, 'h'},  {"spans", 1, nullptr, 's'}, {"volumes", 1, nullptr, 'v'},
-                           {"write", 0, nullptr, 'w'}, {"input", 1, nullptr, 'i'}, {nullptr, 0, nullptr, 0}};
+                           {"write", 0, nullptr, 'w'}, {"input", 1, nullptr, 'i'}, {"device", 1, nullptr, 'd'},
+                           {nullptr, 0, nullptr, 0}};
 }
 
 Errata
@@ -1396,22 +1734,15 @@ Find_Stripe(FilePath const &input_file_path)
   // scheme=http user=u password=p host=172.28.56.109 path=somepath query=somequery port=1234
   // input file format: scheme://hostname:port/somepath;params?somequery user=USER password=PASS
   // user, password, are optional; scheme and host are required
-  MD5Context ctx;
-  INK_MD5 hashT;
 
   char hashStr[33];
-  char *h = "https://ss.ss.@@s.ss:900/jhfjhgsfgnn";
-  // char* h= "http://:@172.28.56.109/file7;?"port      <== this is the format we need
-  url_matcher matcher;
-  if (matcher.match(h))
-    std::cout << h << " : is valid" << std::endl;
-  else
-    std::cout << h << " : is NOT valid" << std::endl;
-  ctx.update(h, strlen(h));
-  in_port_t port = 5005;
-  ctx.update(&port, sizeof(port));
-  ctx.finalize(hashT);
-  printf("hash is %s: \n", ink_code_to_hex_str(hashStr, (unsigned char *)&hashT));
+  //  char* h= http://user:pass@IPADDRESS/path_to_file;?port      <== this is the format we need
+  //  url_matcher matcher;
+  //  if (matcher.match(h))
+  //    std::cout << h << " : is valid" << std::endl;
+  //  else
+  //    std::cout << h << " : is NOT valid" << std::endl;
+
   Errata zret;
   Cache cache;
   if (input_file_path)
@@ -1421,51 +1752,48 @@ Find_Stripe(FilePath const &input_file_path)
     cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
     cache.build_stripe_hash_table();
     for (auto host : cache.URLset) {
-      INK_MD5 hash;
-      ink_code_md5((unsigned char *)host.data(), host.size(), (unsigned char *)&hash);
-      Stripe *stripe_ = cache.key_to_stripe(&hash, host.data(), host.size());
-      printf("hash of %.*s is %s: Stripe  %s \n", (int)host.size(), host.data(),
-             ink_code_to_hex_str(hashStr, (unsigned char *)&hash), stripe_->hashText.data());
+      MD5Context ctx;
+      INK_MD5 hashT;
+      ctx.update(host->url.data(), host->url.size());
+      ctx.update(&host->port, sizeof(host->port));
+      ctx.finalize(hashT);
+      Stripe *stripe_ = cache.key_to_stripe(&hashT, host->url.data(), host->url.size());
+      printf("hash of %.*s is %s: Stripe  %s \n", (int)host->url.size(), host->url.data(),
+             ink_code_to_hex_str(hashStr, (unsigned char *)&hashT), stripe_->hashText.data());
     }
   }
 
   return zret;
 }
-
-bool
-ts::URLparser::verifyURL(std::string &url1)
+Errata
+dir_check()
 {
+  Errata zret;
+  Cache cache;
+  if ((zret = cache.loadSpan(SpanFile))) {
+    cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
+    for (auto &stripe : cache.globalVec_stripe) {
+      stripe->dir_check();
+    }
+  }
+  return zret;
 }
 
-int
-ts::URLparser::getPort(std::string &fullURL)
+Errata
+Clear_Span(std::string devicePath)
 {
-  url_matcher matcher;
-  static const ts::StringView HTTP("http");
-  static const ts::StringView HTTPS("https");
-  ts::StringView url(fullURL.data(), (int)fullURL.size());
-  // check for scheme
-  ts::StringView scheme = url.splitPrefix(':');
-  if ((strcasecmp(scheme, HTTP) == 0) || (strcasecmp(scheme, HTTPS) == 0)) {
-    url += 2;
-    ts::StringView hostPort = url.splitPrefix(':');
-    if (hostPort) // i.e. port is present
-    {
-      ts::StringView port = url.splitPrefix('/');
-      if (!port) // i.e. backslash is not present, then the rest of url must be just port
-        port = url;
-      if (matcher.portmatch(port.begin(), port.size())) {
-        ts::StringView text;
-        auto n = ts::svtoi(port, &text);
-        if (text == port)
-          return n;
+  Errata zret;
+  Cache cache;
+  if ((zret = cache.loadSpan(SpanFile))) {
+    cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
+    for (auto sp : cache._spans) {
+      if (0 == strncmp(sp->_path.path(), devicePath.data(), devicePath.size())) {
+        printf("clearing %s\n", devicePath.data());
+        sp->clearPermanently();
       }
     }
-    return -1;
-  } else {
-    std::cout << "No scheme provided for: " << scheme.begin() << std::endl;
-    return -1;
   }
+  return zret;
 }
 
 int
@@ -1475,6 +1803,7 @@ main(int argc, char *argv[])
   int opt_val;
   bool help = false;
   FilePath input_url_file;
+  std::string inputFile;
   while (-1 != (opt_val = getopt_long(argc, argv, "h", Options, &opt_idx))) {
     switch (opt_val) {
     case 'h':
@@ -1494,6 +1823,10 @@ main(int argc, char *argv[])
     case 'i':
       input_url_file = optarg;
       break;
+    case 'd':
+      char *inp = strdup(optarg);
+      inputFile.assign(inp, strlen(inp));
+      break;
     }
   }
 
@@ -1501,11 +1834,14 @@ main(int argc, char *argv[])
     .subCommand(std::string("stripes"), std::string("List the stripes"),
                 []() { return List_Stripes(Cache::SpanDumpDepth::STRIPE); });
   Commands.add(std::string("clear"), std::string("Clear spans"), &Clear_Spans);
+  Commands.add(std::string("check"), std::string("cache check"), &dir_check);
   Commands.add(std::string("volumes"), std::string("Volumes"), &Simulate_Span_Allocation);
   Commands.add(std::string("alloc"), std::string("Storage allocation"))
     .subCommand(std::string("free"), std::string("Allocate storage on free (empty) spans"), &Cmd_Allocate_Empty_Spans);
   Commands.add(std::string("find"), std::string("Find Stripe Assignment"))
     .subCommand(std::string("url"), std::string("URL"), [&](int, char *argv[]) { return Find_Stripe(input_url_file); });
+  Commands.add(std::string("clearspan"), std::string("clear specific span"))
+    .subCommand(std::string("span"), std::string("device path"), [&](int, char *argv[]) { return Clear_Span(inputFile); });
 
   Commands.setArgIndex(optind);
 
