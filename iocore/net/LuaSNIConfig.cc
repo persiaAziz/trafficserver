@@ -20,5 +20,24 @@
  */
 
 #include "LuaSNIConfig.h"
+#include <cstring>
 
-TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR{TsConfigDescriptor::Type::STRING, "String", "fqdn", "Fully Qualified Domain Name" };
+TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR{TsConfigDescriptor::Type::STRING, "String", "fqdn",
+                                                       "Fully Qualified Domain Name"};
+char LuaString[] = "sni_config = {\
+{ fqdn:one.com, action:TLS.ACTION.TUNNEL, upstream_cert_verification:TLS.VERIFY.REQUIRED}\
+}";
+
+ts::Errata
+LuaSNIConfig::loader(lua_State *s)
+{
+  char buff[256];
+  int error;
+  lua_State *L = lua_open(); /* opens Lua */
+  // luaopen_base(L);             /* opens the basic library */
+  // luaopen_table(L);            /* opens the table library */
+  // luaopen_io(L);               /* opens the I/O library */
+  // luaopen_string(L);           /* opens the string lib. */
+  // luaopen_math(L);             /* opens the math lib. */
+  luaL_loadbuffer(L, LuaString, strlen(LuaString), "LuaString");
+}
