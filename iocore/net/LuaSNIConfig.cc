@@ -21,23 +21,23 @@
 
 #include "LuaSNIConfig.h"
 #include <cstring>
+#include "ts/Diags.h"
 
 TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR{TsConfigDescriptor::Type::STRING, "String", "fqdn",
                                                        "Fully Qualified Domain Name"};
-char LuaString[] = "sni_config = {\
-{ fqdn:one.com, action:TLS.ACTION.TUNNEL, upstream_cert_verification:TLS.VERIFY.REQUIRED}\
-}";
 
 ts::Errata
-LuaSNIConfig::loader(lua_State *s)
+LuaSNIConfig::loader(lua_State *L)
 {
+  ts::Errata zret;
   char buff[256];
   int error;
-  lua_State *L = lua_open(); /* opens Lua */
-  // luaopen_base(L);             /* opens the basic library */
-  // luaopen_table(L);            /* opens the table library */
-  // luaopen_io(L);               /* opens the I/O library */
-  // luaopen_string(L);           /* opens the string lib. */
-  // luaopen_math(L);             /* opens the math lib. */
-  luaL_loadbuffer(L, LuaString, strlen(LuaString), "LuaString");
+
+  int l_type = lua_type(L, -1);
+  if (l_type == LUA_TTABLE)
+    Debug("ssl", "found table");
+  else {
+    zret.push(ts::Errata::Message(0, 0, "Invalid Lua Stack"));
+  }
+  return zret;
 }
