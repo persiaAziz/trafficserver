@@ -19,8 +19,8 @@
 #include "Errata.h"
 #include "lua.h"
 #include <unordered_map>
-    #include <lauxlib.h>
-    #include <lualib.h>
+#include <lauxlib.h>
+#include <lualib.h>
 
 /** Static schema data for a configuration value.
 

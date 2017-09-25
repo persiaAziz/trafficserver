@@ -21,6 +21,7 @@ AM_CPPFLAGS += \
   $(iocore_include_dirs) \
   -I$(abs_top_srcdir)/lib \
   -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/lib/tsconfig \
   -I$(abs_top_srcdir)/proxy \
   -I$(abs_top_srcdir)/proxy/hdrs \
   -I$(abs_top_srcdir)/proxy/shared \
@@ -74,6 +75,9 @@ test_UDPNet_LDADD = \
 test_UDPNet_SOURCES = \
   test_I_UDPNet.cc
 
+libinknet_a_LIBADD = \
+$(top_builddir)/lib/tsconfig/libtsconfig.la
+
 libinknet_a_SOURCES = \
   SNIActionPerformer.cc \
   BIO_fastopen.cc \
@@ -89,7 +93,8 @@ libinknet_a_SOURCES = \
   Inline.cc \
   I_SessionAccept.h \
   SessionAccept.cc \
-  LuaSNIConfig.h LuaSNIConfig.cc \
+  LuaSNIConfig.h \
+  LuaSNIConfig.cc \
   Net.cc \
   NetVConnection.cc \
   P_SNIActionPerformer.h \
