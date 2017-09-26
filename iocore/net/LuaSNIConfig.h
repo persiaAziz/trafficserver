@@ -37,7 +37,7 @@ using ts::Errata;
 struct LuaSNIConfig : public TsConfigBase {
   using self = LuaSNIConfig;
   enum class Action { CLOSE, TUNNEL };
-
+  static TsConfigDescriptor desc;
   static TsConfigArrayDescriptor DESCRIPTOR;
 
   LuaSNIConfig() : TsConfigBase(this->DESCRIPTOR) {}
@@ -62,5 +62,4 @@ struct LuaSNIConfig : public TsConfigBase {
   std::vector<self::Item> items;
   ts::Errata loader(lua_State *s) override;
 };
-TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR;
 #endif /* LUASNICONFIG_H */

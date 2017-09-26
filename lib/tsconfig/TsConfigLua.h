@@ -34,7 +34,7 @@
 #include "tsconfig/Errata.h"
 #include <unordered_map>
 #include "luajit/src/lua.hpp"
-
+#include <iostream>
 /** Static schema data for a configuration value.
 
     This is a base class for data about a configuration value. This is intended to be a singleton
@@ -51,7 +51,14 @@ struct TsConfigDescriptor {
     STRING, ///< String.
     ENUM ///< Enumeration (specialized).
   };
-  TsConfigDescriptor() : type_name(nullptr),name(nullptr),description(nullptr) {}
+/*  TsConfigDescriptor() : type_name(nullptr),name(nullptr),description(nullptr) {}
+  TsConfigDescriptor(Type typ,std::initializer_list<std::string> str_list): type(typ)
+  {
+      for (auto str :str_list) {
+                std::cout << str << std::endl;
+            }
+  }
+ * */
   Type type; ///< Value type.
   std::string type_name; ///< Literal type name used in the schema.
   std::string name; ///< Name of the configuration value.
@@ -84,6 +91,7 @@ public:
 };
 
 class TsConfigInt : public TsConfigBase {
+public:
    TsConfigInt(TsConfigDescriptor const& d, int& i) : TsConfigBase(d), ref(i) {}
    int & ref;
    ts::Errata loader(lua_State* s) override;
@@ -117,8 +125,7 @@ public:
 class TsConfigArrayDescriptor : public TsConfigDescriptor {
 public:
    TsConfigArrayDescriptor(TsConfigDescriptor const& d) : item(d) {}
-   TsConfigArrayDescriptor():item(nullptr) {}
-   TsConfigDescriptor& item;
+   const TsConfigDescriptor& item;
 };
 
 class TsConfigEnumDescriptor : public TsConfigDescriptor {
