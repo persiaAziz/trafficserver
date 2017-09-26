@@ -308,9 +308,8 @@ SNIConfig::cloneProtoSet()
   }
 }
 
-char LuaString[] = "sni_config = {\
-{ fqdn:one.com, action:TLS.ACTION.TUNNEL, upstream_cert_verification:TLS.VERIFY.REQUIRED}\
-}";
+char LuaString[] = "sni_config = {{fqdn='one.com', action='TLS.ACTION.TUNNEL', upstream_cert_verification='TLS.VERIFY.REQUIRED'},"\
+"{fqdn='two.com', action='TLS.ACTION.TUNNEL', upstream_cert_verification='TLS.VERIFY.REQUIRED'}};";
 
 void
 SNIConfig::reconfigure()
@@ -320,6 +319,7 @@ SNIConfig::reconfigure()
   lua_State *L = lua_open(); /* opens Lua */
   luaL_openlibs(L);
   luaL_loadbuffer(L, LuaString, strlen(LuaString), "LuaString");
+  lua_pcall(L, 0, 0, 0);
   L_sni.loader(L);
   params->Initialize();
   configid = configProcessor.set(configid, params);

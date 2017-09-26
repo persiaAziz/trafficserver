@@ -35,7 +35,20 @@ LuaSNIConfig::loader(lua_State *L)
   char buff[256];
   int error;
 
+  lua_getfield(L,LUA_GLOBALSINDEX,"sni_config");
   int l_type = lua_type(L, -1);
+  switch(l_type)
+  {
+      case LUA_TTABLE:
+          Debug("ssl","table==============");
+          break;
+      case LUA_TSTRING:
+          Debug("ssl","string============== %s",lua_tostring(L,-1));
+          break;
+      default:
+          Debug("ssl","nothing===================");
+
+  }
   if (l_type == LUA_TTABLE)
     Debug("ssl", "found table");
   else {
