@@ -23,7 +23,9 @@
 #include <cstring>
 #include "ts/Diags.h"
 
-TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR{TsConfigDescriptor::Type::STRING, "String", "fqdn",
+TsConfigDescriptor LuaSNIConfig::desc={TsConfigDescriptor::Type::ARRAY, "Array","Item vector","Vector"};
+TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR(LuaSNIConfig::desc);
+TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR = {TsConfigDescriptor::Type::STRING, "String", "fqdn",
                                                        "Fully Qualified Domain Name"};
 
 ts::Errata
