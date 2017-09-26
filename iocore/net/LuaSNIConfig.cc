@@ -23,10 +23,10 @@
 #include <cstring>
 #include "ts/Diags.h"
 
-TsConfigDescriptor LuaSNIConfig::desc={TsConfigDescriptor::Type::ARRAY, "Array","Item vector","Vector"};
+TsConfigDescriptor LuaSNIConfig::desc = {TsConfigDescriptor::Type::ARRAY, "Array", "Item vector", "Vector"};
 TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR(LuaSNIConfig::desc);
 TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR = {TsConfigDescriptor::Type::STRING, "String", "fqdn",
-                                                       "Fully Qualified Domain Name"};
+                                                          "Fully Qualified Domain Name"};
 
 ts::Errata
 LuaSNIConfig::loader(lua_State *L)
@@ -41,5 +41,12 @@ LuaSNIConfig::loader(lua_State *L)
   else {
     zret.push(ts::Errata::Message(0, 0, "Invalid Lua Stack"));
   }
+  return zret;
+}
+
+ts::Errata
+LuaSNIConfig::Item::loader(lua_State *s)
+{
+  ts::Errata zret;
   return zret;
 }

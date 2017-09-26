@@ -57,7 +57,8 @@ struct LuaSNIConfig : public TsConfigBase {
     // static TsConfigDescriptor LEVEL_DESCRIPTOR;
     // static TsConfigInt<Item> LEVEL_CONFIG;
     static TsConfigEnumDescriptor ACTION_DESCRIPTOR;
-    TsConfigEnum<Action> ACTION_CONFIG;
+    TsConfigEnum<self::Action> ACTION_CONFIG;
+    ~Item() {}
   };
   std::vector<self::Item> items;
   ts::Errata loader(lua_State *s) override;

@@ -85,14 +85,15 @@ public:
   TsConfigBase(TsConfigDescriptor const& d) : descriptor(d) {}
   TsConfigDescriptor const& descriptor; ///< Static schema data.
   Source source = Source::NONE; ///< Where the instance data came from.
-
+  ~TsConfigBase()
+  {}
   /// Load the instance data from the Lua stack.
   virtual ts::Errata loader(lua_State* s) = 0;
 };
 
 class TsConfigInt : public TsConfigBase {
 public:
-   TsConfigInt(TsConfigDescriptor const& d, int& i) : TsConfigBase(d), ref(i) {}
+   TsConfigInt(TsConfigDescriptor const& d, int& i);
    int & ref;
    ts::Errata loader(lua_State* s) override;
 };
@@ -119,7 +120,11 @@ public:
         ref = other.ref;
         return *this;
     }
-   ts::Errata loader(lua_State* s) override;
+   ts::Errata loader(lua_State* s) override
+   {
+    ts::Errata zret;
+    return zret;
+    }
 };
 
 class TsConfigArrayDescriptor : public TsConfigDescriptor {
