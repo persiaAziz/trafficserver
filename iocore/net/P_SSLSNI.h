@@ -38,6 +38,7 @@
 #include "openssl/ossl_typ.h"
 #include <vector>
 #include <strings.h>
+#include "LuaSNIConfig.h"
 
 // Properties for the next hop server
 struct NextHopProperty {
@@ -57,6 +58,7 @@ struct SNIConfigParams : public ConfigInfo {
   SNIMap wild_sni_action_map;
   NextHopPropertyTable next_hop_table;
   NextHopPropertyTable wild_next_hop_table;
+  LuaSNIConfig L_sni;
   void setPropertyConfig(PropertyActions id, char *servername, void *param);
   NextHopProperty *getPropertyConfig(cchar *servername) const;
   SNIConfigParams();

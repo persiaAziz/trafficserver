@@ -34,7 +34,6 @@
 #include "ts/SimpleTokenizer.h"
 #include "P_SSLConfig.h"
 #include "ts/ink_memory.h"
-#include "LuaSNIConfig.h"
 
 #define SNI_NAME_TAG "dest_host"
 #define SNI_ACTION_TAG "action"
@@ -186,10 +185,19 @@ SNIConfigParams::printSNImap() const
           sni_action_map.get(keys.get(i))->size());
   }
 }
+char LuaString[] = "sni_config = {{fqdn='one.com', action='TLS.ACTION.TUNNEL', "
+                   "upstream_cert_verification='TLS.VERIFY.REQUIRED'},{fqdn='one2.com', action='TLS.ACTION.TU2NNEL', "
+                   "upstream_cert_verification='TLS.VE2RIFY.REQUIRED'}};";
 
 int
 SNIConfigParams::Initialize()
 {
+  lua_State *L = lua_open(); /* opens Lua */
+  luaL_openlibs(L);
+  luaL_loadbuffer(L, LuaString, strlen(LuaString), "LuaString");
+  lua_pcall(L, 0, 0, 0);
+  L_sni.loader(L);
+
   // cleanup();
   ats_scoped_str fileBuffer;
   char *line;
@@ -308,19 +316,14 @@ SNIConfig::cloneProtoSet()
   }
 }
 
-char LuaString[] = "sni_config = {\
-{ fqdn:one.com, action:TLS.ACTION.TUNNEL, upstream_cert_verification:TLS.VERIFY.REQUIRED}\
-}";
+// char LuaString[] = "sni_config = {fqdn='one.com', action='TLS.ACTION.TUNNEL',
+// upstream_cert_verification='TLS.VERIFY.REQUIRED'};";
 
 void
 SNIConfig::reconfigure()
 {
   SNIConfigParams *params = new SNIConfigParams;
-  LuaSNIConfig L_sni;
-  lua_State *L = lua_open(); /* opens Lua */
-  luaL_openlibs(L);
-  luaL_loadbuffer(L, LuaString, strlen(LuaString), "LuaString");
-  L_sni.loader(L);
+
   params->Initialize();
   configid = configProcessor.set(configid, params);
 }
