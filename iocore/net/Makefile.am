@@ -76,7 +76,8 @@ test_UDPNet_SOURCES = \
   test_I_UDPNet.cc
 
 libinknet_a_LIBADD = \
-$(top_builddir)/lib/tsconfig/libtsconfig.la
+$(top_builddir)/lib/tsconfig/.libs/Errata.o \
+$(top_builddir)/lib/tsconfig/.libs/TsConfigLua.o
 
 libinknet_a_SOURCES = \
   SNIActionPerformer.cc \
