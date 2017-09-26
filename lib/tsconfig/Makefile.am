@@ -41,6 +41,7 @@ libtsconfig_la_SOURCES = \
   TsConfigGrammar.hpp \
   TsConfigLexer.h \
   TsConfigLua.h \
+  TsConfigLua.cc \
   TsConfigParseEvents.h \
   TsConfigTypes.h \
   TsErrataUtil.cc \

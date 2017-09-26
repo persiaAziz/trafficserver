@@ -40,7 +40,7 @@ struct LuaSNIConfig : public TsConfigBase {
 
   static TsConfigArrayDescriptor DESCRIPTOR;
 
-  LuaSNIConfig() : TsConfigBase(DESCRIPTOR) {}
+  LuaSNIConfig() : TsConfigBase(this->DESCRIPTOR) {}
 
   struct Item : public TsConfigBase {
     Item() : TsConfigBase(DESCRIPTOR), FQDN_CONFIG(FQDN_DESCRIPTOR, fqdn), ACTION_CONFIG(ACTION_DESCRIPTOR, action) {}
@@ -59,8 +59,8 @@ struct LuaSNIConfig : public TsConfigBase {
     static TsConfigEnumDescriptor ACTION_DESCRIPTOR;
     TsConfigEnum<Action> ACTION_CONFIG;
   };
-  std::vector<Item> items;
+  std::vector<self::Item> items;
   ts::Errata loader(lua_State *s) override;
 };
-
+TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR;
 #endif /* LUASNICONFIG_H */
