@@ -27,7 +27,23 @@ TsConfigDescriptor LuaSNIConfig::desc = {TsConfigDescriptor::Type::ARRAY, "Array
 TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR(LuaSNIConfig::desc);
 TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR = {TsConfigDescriptor::Type::STRING, "String", "fqdn",
                                                           "Fully Qualified Domain Name"};
-
+void
+getItem(lua_State *L)
+{
+  int l_type = lua_type(L, -1);
+  lua_pushnil(L);
+  while (lua_next(L, -2)) //-1 will contain the subarray now (since it is a value in the main table))
+  {
+    const char *name = lua_tostring(L, -2);
+    l_type           = lua_type(L, -1);
+    if (l_type == LUA_TSTRING)
+      Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
+    else if (l_type == LUA_TNUMBER)
+      Debug("ssl", "Entry name: %s value: %d ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
+    lua_pop(L, 1);
+  }
+  // lua_pop(L,1);
+}
 ts::Errata
 LuaSNIConfig::loader(lua_State *L)
 {
@@ -35,19 +51,33 @@ LuaSNIConfig::loader(lua_State *L)
   char buff[256];
   int error;
 
-  lua_getfield(L,LUA_GLOBALSINDEX,"sni_config");
+  lua_getfield(L, LUA_GLOBALSINDEX, "sni_config");
   int l_type = lua_type(L, -1);
-  switch(l_type)
-  {
-      case LUA_TTABLE:
-          Debug("ssl","table==============");
-          break;
-      case LUA_TSTRING:
-          Debug("ssl","string============== %s",lua_tostring(L,-1));
-          break;
-      default:
-          Debug("ssl","nothing===================");
+  switch (l_type) {
+  case LUA_TTABLE:
+    Debug("ssl", "table==============");
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0) {
+      const char *name = lua_tostring(L, -2);
 
+      l_type = lua_type(L, -1);
+      if (l_type == LUA_TTABLE) {
+        Debug("ssl", "Found another table at %s +++++++++++++++", name);
+        getItem(L);
+      } else if (l_type == LUA_TSTRING)
+        Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
+      else if (l_type == LUA_TNUMBER)
+        Debug("ssl", "Entry name: %s value: %d ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
+
+      l_type = lua_type(L, -1);
+      lua_pop(L, 1);
+    }
+    break;
+  case LUA_TSTRING:
+    Debug("ssl", "string============== %s", lua_tostring(L, -1));
+    break;
+  default:
+    Debug("ssl", "nothing===================");
   }
   if (l_type == LUA_TTABLE)
     Debug("ssl", "found table");

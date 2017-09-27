@@ -308,8 +308,11 @@ SNIConfig::cloneProtoSet()
   }
 }
 
-char LuaString[] = "sni_config = {{fqdn='one.com', action='TLS.ACTION.TUNNEL', upstream_cert_verification='TLS.VERIFY.REQUIRED'},"\
-"{fqdn='two.com', action='TLS.ACTION.TUNNEL', upstream_cert_verification='TLS.VERIFY.REQUIRED'}};";
+// char LuaString[] = "sni_config = {fqdn='one.com', action='TLS.ACTION.TUNNEL',
+// upstream_cert_verification='TLS.VERIFY.REQUIRED'};";
+char LuaString[] = "sni_config = {{fqdn='one.com', action='TLS.ACTION.TUNNEL', "
+                   "upstream_cert_verification='TLS.VERIFY.REQUIRED'},{fqdn='one2.com', action='TLS.ACTION.TU2NNEL', "
+                   "upstream_cert_verification='TLS.VE2RIFY.REQUIRED'}};";
 
 void
 SNIConfig::reconfigure()
