@@ -36,15 +36,30 @@ using ts::Errata;
 
 struct LuaSNIConfig : public TsConfigBase {
   using self = LuaSNIConfig;
-  enum class Action { CLOSE, TUNNEL };
+  enum class Action {
+    TS_DISABLE_H2 = 0,
+    TS_VERIFY_CLIENT, // this applies to server side vc only
+    TS_TUNNEL_ROUTE,  // blind tunnel action
+    TS_VERIFY_SERVER,
+    TS_CLIENT_CERT
+  };
   static TsConfigDescriptor desc;
   static TsConfigArrayDescriptor DESCRIPTOR;
 
-  LuaSNIConfig() : TsConfigBase(this->DESCRIPTOR) {}
+  LuaSNIConfig() : TsConfigBase(this->DESCRIPTOR) { self::Item::Initialize(); }
 
   struct Item : public TsConfigBase {
     Item() : TsConfigBase(DESCRIPTOR), FQDN_CONFIG(FQDN_DESCRIPTOR, fqdn), ACTION_CONFIG(ACTION_DESCRIPTOR, action) {}
     ts::Errata loader(lua_State *s) override;
+    static void
+    Initialize()
+    {
+      ACTION_DESCRIPTOR.values = {
+        {"TS_DISABLE_H2", 0}, {"TS_VERIFY_CLIENT", 1}, {"TS_TUNNEL_ROUTE", 2}, {"TS_VERIFY_SERVER", 3}, {"TS_CLIENT_CERT", 4}};
+
+      ACTION_DESCRIPTOR.keys = {
+        {0, "TS_DISABLE_H2"}, {1, "TS_VERIFY_CLIENT"}, {2, "TS_TUNNEL_ROUTE"}, {3, "TS_VERIFY_SERVER"}, {4, "TS_CLIENT_CERT"}};
+    }
 
     std::string fqdn;
     int level;

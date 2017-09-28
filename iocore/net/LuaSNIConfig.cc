@@ -27,23 +27,8 @@ TsConfigDescriptor LuaSNIConfig::desc = {TsConfigDescriptor::Type::ARRAY, "Array
 TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR(LuaSNIConfig::desc);
 TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR = {TsConfigDescriptor::Type::STRING, "String", "fqdn",
                                                           "Fully Qualified Domain Name"};
-void
-getItem(lua_State *L)
-{
-  int l_type = lua_type(L, -1);
-  lua_pushnil(L);
-  while (lua_next(L, -2)) //-1 will contain the subarray now (since it is a value in the main table))
-  {
-    const char *name = lua_tostring(L, -2);
-    l_type           = lua_type(L, -1);
-    if (l_type == LUA_TSTRING)
-      Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
-    else if (l_type == LUA_TNUMBER)
-      Debug("ssl", "Entry name: %s value: %d ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
-    lua_pop(L, 1);
-  }
-  // lua_pop(L,1);
-}
+TsConfigEnumDescriptor LuaSNIConfig::Item::ACTION_DESCRIPTOR;
+
 ts::Errata
 LuaSNIConfig::loader(lua_State *L)
 {
@@ -53,43 +38,52 @@ LuaSNIConfig::loader(lua_State *L)
 
   lua_getfield(L, LUA_GLOBALSINDEX, "sni_config");
   int l_type = lua_type(L, -1);
+
   switch (l_type) {
-  case LUA_TTABLE:
-    Debug("ssl", "table==============");
+  case LUA_TTABLE: // this has to be a multidimensional table
     lua_pushnil(L);
     while (lua_next(L, -2) != 0) {
-      const char *name = lua_tostring(L, -2);
-
       l_type = lua_type(L, -1);
-      if (l_type == LUA_TTABLE) {
-        Debug("ssl", "Found another table at %s +++++++++++++++", name);
-        getItem(L);
-      } else if (l_type == LUA_TSTRING)
-        Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
-      else if (l_type == LUA_TNUMBER)
-        Debug("ssl", "Entry name: %s value: %d ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
-
-      l_type = lua_type(L, -1);
+      if (l_type == LUA_TTABLE) { // the item should be table
+        // new Item
+        LuaSNIConfig::Item item;
+        item.loader(L);
+      } else {
+        zret.push(ts::Errata::Message(0, 0, "Invalid Entry at SNI config"));
+      }
       lua_pop(L, 1);
     }
     break;
   case LUA_TSTRING:
-    Debug("ssl", "string============== %s", lua_tostring(L, -1));
+    Debug("ssl", "string value %s", lua_tostring(L, -1));
     break;
   default:
-    Debug("ssl", "nothing===================");
+    zret.push(ts::Errata::Message(0, 0, "Invalid Lua SNI Config"));
+    Debug("ssl", "Please check your SNI config");
+    break;
   }
-  if (l_type == LUA_TTABLE)
-    Debug("ssl", "found table");
-  else {
-    zret.push(ts::Errata::Message(0, 0, "Invalid Lua Stack"));
-  }
+
   return zret;
 }
 
 ts::Errata
-LuaSNIConfig::Item::loader(lua_State *s)
+LuaSNIConfig::Item::loader(lua_State *L)
 {
   ts::Errata zret;
+  int l_type = lua_type(L, -1);
+  lua_pushnil(L);
+  while (lua_next(L, -2)) //-1 will contain the subarray now (since it is a value in the main table))
+  {
+    const char *name = lua_tostring(L, -2);
+    l_type           = lua_type(L, -1);
+    if (l_type == LUA_TSTRING) {
+      Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
+    } else if (l_type == LUA_TNUMBER) {
+      Debug("ssl", "Entry name: %s value: %d ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
+    } else {
+      zret.push(ts::Errata::Message(0, 0, "Invalid Entry at SNI config"));
+    }
+    lua_pop(L, 1);
+  }
   return zret;
 }

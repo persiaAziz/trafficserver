@@ -134,6 +134,7 @@ public:
 };
 
 class TsConfigEnumDescriptor : public TsConfigDescriptor {
+public:
    std::unordered_map<std::string, int> values;
    std::unordered_map<int, std::string> keys;
 };
