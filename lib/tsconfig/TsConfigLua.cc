@@ -8,12 +8,14 @@
 ts::Errata TsConfigInt::loader(lua_State* s)
 {
     ts::Errata zret;
+    ref = lua_tonumber(s,-1);
     return zret;
 }
 
 ts::Errata TsConfigString::loader(lua_State* s)
 {
     ts::Errata zret;
+    ref = lua_tostring(s,-1);
     return zret;
 
 }

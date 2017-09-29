@@ -70,12 +70,20 @@ ts::Errata
 LuaSNIConfig::Item::loader(lua_State *L)
 {
   ts::Errata zret;
-  int l_type = lua_type(L, -1);
+  int l_type = lua_type(L, -1);//-1 will contain the subarray now (since it is a value in the main table))
   lua_pushnil(L);
-  while (lua_next(L, -2)) //-1 will contain the subarray now (since it is a value in the main table))
+  while (lua_next(L, -2))
   {
+    if(lua_type(L,-2)!=LUA_TSTRING)
+    {
+        Debug("ssl","string keys expected for entries in ssl_SNI.config");
+    }
     const char *name = lua_tostring(L, -2);
-    l_type           = lua_type(L, -1);
+    if(strncmp(name,TS_fqdn,strlen(TS_fqdn)))
+    {
+        FQDN_CONFIG.loader(L);
+    }
+    l_type = lua_type(L, -1);
     if (l_type == LUA_TSTRING) {
       Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
     } else if (l_type == LUA_TNUMBER) {
@@ -86,4 +94,17 @@ LuaSNIConfig::Item::loader(lua_State *L)
     lua_pop(L, 1);
   }
   return zret;
+}
+
+ts::Errata
+LuaSNIConfig::registerEnum(lua_State* L)
+{
+    lua_newtable (L);
+    lua_setglobal(L,"ActionTable");
+    int i=start;
+    LUA_ENUM(L,"disable_h2",i++);
+    LUA_ENUM(L,"verify_client",i++);
+    LUA_ENUM(L,"tunnel_route",i++);
+    LUA_ENUM(L,"verify_origin_server",i++);
+    LUA_ENUM(L,"client_cert",i++);
 }

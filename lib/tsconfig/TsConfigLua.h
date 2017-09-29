@@ -98,10 +98,17 @@ public:
    ts::Errata loader(lua_State* s) override;
 };
 
+class TsConfigBool : public TsConfigBase {
+public:
+    TsConfigBool(TsConfigDescriptor const& d, int& i);
+    bool &ref;
+    ts::Errata loader(lua_State* s) override;
+};
+
 class TsConfigString : public TsConfigBase {
 public:
    TsConfigString(TsConfigDescriptor const& d, std::string& str) : TsConfigBase(d), ref(str) {}
-    std::string& ref;
+   std::string& ref;
     TsConfigString& operator= (const TsConfigString& other)
     {
         ref = other.ref;
@@ -115,11 +122,6 @@ class TsConfigEnum : public TsConfigBase {
 public:
    TsConfigEnum(TsConfigDescriptor const& d, E& i) : TsConfigBase(d), ref(i) {}
    E& ref;
-   TsConfigEnum& operator= (const TsConfigEnum& other)
-    {
-        ref = other.ref;
-        return *this;
-    }
    ts::Errata loader(lua_State* s) override
    {
     ts::Errata zret;
