@@ -27,14 +27,18 @@ TsConfigDescriptor LuaSNIConfig::desc = {TsConfigDescriptor::Type::ARRAY, "Array
 TsConfigArrayDescriptor LuaSNIConfig::DESCRIPTOR(LuaSNIConfig::desc);
 TsConfigDescriptor LuaSNIConfig::Item::FQDN_DESCRIPTOR = {TsConfigDescriptor::Type::STRING, "String", "fqdn",
                                                           "Fully Qualified Domain Name"};
-TsConfigEnumDescriptor LuaSNIConfig::Item::ACTION_DESCRIPTOR;
+
+TsConfigEnumDescriptor LuaSNIConfig::Item::ACTION_DESCRIPTOR{
+  TsConfigDescriptor::Type::ENUM, "enum", "Action", "Action for rule",
+  {{"NONE", 0},{"TUNNEL", 1},{"MAP", 2}}
+};
 
 ts::Errata
 LuaSNIConfig::loader(lua_State *L)
 {
   ts::Errata zret;
-  char buff[256];
-  int error;
+//  char buff[256];
+//  int error;
 
   lua_getfield(L, LUA_GLOBALSINDEX, "sni_config");
   int l_type = lua_type(L, -1);
@@ -87,7 +91,7 @@ LuaSNIConfig::Item::loader(lua_State *L)
     if (l_type == LUA_TSTRING) {
       Debug("ssl", "Entry name: %s value: %s _________________", name, lua_tostring(L, -1));
     } else if (l_type == LUA_TNUMBER) {
-      Debug("ssl", "Entry name: %s value: %d ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
+      Debug("ssl", "Entry name: %s value: %g ^^^^^^^^^^^^^^^^", name, lua_tonumber(L, -1));
     } else {
       zret.push(ts::Errata::Message(0, 0, "Invalid Entry at SNI config"));
     }
@@ -107,4 +111,5 @@ LuaSNIConfig::registerEnum(lua_State* L)
     LUA_ENUM(L,"tunnel_route",i++);
     LUA_ENUM(L,"verify_origin_server",i++);
     LUA_ENUM(L,"client_cert",i++);
+    return {};
 }
