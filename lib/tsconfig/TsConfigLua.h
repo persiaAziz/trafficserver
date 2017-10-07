@@ -35,6 +35,17 @@
 #include <unordered_map>
 #include "luajit/src/lua.hpp"
 #include <iostream>
+#include <ts/string_view.h>
+#include <ts/HashFNV.h>
+
+/// Hash functor for @c string_view
+inline size_t TsLuaConfigSVHash(ts::string_view const& sv)
+{
+  ATSHash64FNV1a h;
+  h.update(sv.data(), sv.size());
+  return h.get();
+}
+
 /** Static schema data for a configuration value.
 
     This is a base class for data about a configuration value. This is intended to be a singleton
@@ -49,6 +60,7 @@ struct TsConfigDescriptor {
     INT, ///< Integer value.
     FLOAT, ///< Floating point value.
     STRING, ///< String.
+    BOOL,
     ENUM ///< Enumeration (specialized).
   };
 /*  TsConfigDescriptor() : type_name(nullptr),name(nullptr),description(nullptr) {}
@@ -60,9 +72,9 @@ struct TsConfigDescriptor {
   }
  * */
   Type type; ///< Value type.
-  std::string type_name; ///< Literal type name used in the schema.
-  std::string name; ///< Name of the configuration value.
-  std::string description; ///< Description of the  value.
+  ts::string_view type_name; ///< Literal type name used in the schema.
+  ts::string_view name; ///< Name of the configuration value.
+  ts::string_view description; ///< Description of the  value.
 };
 
 /** Configuration item instance data.
@@ -93,28 +105,32 @@ public:
 
 class TsConfigInt : public TsConfigBase {
 public:
-   TsConfigInt(TsConfigDescriptor const& d, int& i);
-   int & ref;
+   TsConfigInt(TsConfigDescriptor const& d, int& i):TsConfigBase(d),ref(i){}
    ts::Errata loader(lua_State* s) override;
+private:
+   int & ref;
 };
 
 class TsConfigBool : public TsConfigBase {
 public:
-    TsConfigBool(TsConfigDescriptor const& d, int& i);
-    bool &ref;
+    TsConfigBool(TsConfigDescriptor const& d, bool& i):TsConfigBase(d), ref(i) {}
     ts::Errata loader(lua_State* s) override;
+private:
+    bool &ref;
+
 };
 
 class TsConfigString : public TsConfigBase {
 public:
    TsConfigString(TsConfigDescriptor const& d, std::string& str) : TsConfigBase(d), ref(str) {}
-   std::string& ref;
-    TsConfigString& operator= (const TsConfigString& other)
-    {
-        ref = other.ref;
-        return *this;
-    }
+//    TsConfigString& operator= (const TsConfigString& other)
+//    {
+//        ref = other.ref;
+//        return *this;
+//    }
    ts::Errata loader(lua_State* s) override;
+private:
+   std::string& ref;
 };
 
 template < typename E >
@@ -136,9 +152,20 @@ public:
 };
 
 class TsConfigEnumDescriptor : public TsConfigDescriptor {
+  using self_type = TsConfigEnumDescriptor;
+  using super_type = TsConfigDescriptor;
 public:
-   std::unordered_map<std::string, int> values;
-   std::unordered_map<int, std::string> keys;
+  struct Pair { ts::string_view key; int value; };
+ TsConfigEnumDescriptor(Type t, ts::string_view t_name, ts::string_view n, ts::string_view d, std::initializer_list<Pair> pairs)
+    : super_type{t, t_name, n, d}, values{pairs.size(), &TsLuaConfigSVHash}, keys{pairs.size()}
+  {
+    for ( auto& p : pairs ) {
+      values[p.key] = p.value;
+      keys[p.value] = p.key;
+    }
+  }
+  std::unordered_map<ts::string_view, int, size_t(*)(ts::string_view const&) > values;
+  std::unordered_map<int, ts::string_view> keys;
 };
 
 class TsConfigObjectDescriptor : public TsConfigDescriptor {

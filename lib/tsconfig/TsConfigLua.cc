@@ -20,6 +20,13 @@ ts::Errata TsConfigString::loader(lua_State* s)
 
 }
 
+ts::Errata TsConfigBool::loader(lua_State* s)
+{
+    ts::Errata zret;
+    ref = lua_toboolean(s,-1);
+    return zret;
+}
+
 //template < typename E >
 //ts::Errata TsConfigEnum<E>::loader(lua_State* s)
 //{

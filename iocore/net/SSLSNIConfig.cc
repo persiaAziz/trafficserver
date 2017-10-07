@@ -185,9 +185,9 @@ SNIConfigParams::printSNImap() const
           sni_action_map.get(keys.get(i))->size());
   }
 }
-char LuaString[] = "sni_config = {{fqdn='one.com', action='TLS.ACTION.TUNNEL', "
-                   "upstream_cert_verification='TLS.VERIFY.REQUIRED'},{fqdn='one2.com', action='TLS.ACTION.TU2NNEL', "
-                   "upstream_cert_verification='TLS.VE2RIFY.REQUIRED'}};";
+char LuaString[] = "sni_config = {{fqdn='one.com', disable_h2=true, "
+                   "verify_client=2},{fqdn='one2.com', disable_h2=false, "
+                   "verify_client=0}};";
 
 int
 SNIConfigParams::Initialize()
