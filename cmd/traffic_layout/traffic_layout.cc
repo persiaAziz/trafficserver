@@ -172,6 +172,7 @@ produce_layout(bool json)
   print_var("remap.config", RecConfigReadConfigPath("proxy.config.url_remap.filename"), json);
   print_var("plugin.config", RecConfigReadConfigPath(nullptr, "plugin.config"), json);
   print_var("ssl_multicert.config", RecConfigReadConfigPath("proxy.config.ssl.server.multicert.filename"), json);
+  print_var("ssl_server_name.config", RecConfigReadConfigPath("proxy.config.ssl.servername.filename"), json);
   print_var("storage.config", RecConfigReadConfigPath("proxy.config.cache.storage_filename"), json);
   print_var("hosting.config", RecConfigReadConfigPath("proxy.config.cache.hosting_filename"), json);
   print_var("volume.config", RecConfigReadConfigPath("proxy.config.cache.volume_filename"), json);
@@ -202,7 +203,6 @@ traffic_runroot(int argc, const char **argv)
 
   // start the runroot creating stuff
   std::string original_root = TS_BUILD_PREFIX;
-  append_slash(original_root);
 
   // setting up ts_runroot
   // Use passed in parameter, else use ENV variable
@@ -220,8 +220,7 @@ traffic_runroot(int argc, const char **argv)
 
   // handle the ts_runroot
   // ts runroot must be an accessible path
-  append_slash(ts_runroot);
-  std::ifstream check_file(ts_runroot + "runroot_path.yaml");
+  std::ifstream check_file(Layout::relative_to(ts_runroot, "runroot_path.yml"));
   if (check_file.good()) {
     // if the path already ts_runroot, use it
     ink_notice("Using existing TS_RUNROOT...");
@@ -236,14 +235,14 @@ traffic_runroot(int argc, const char **argv)
 
   // create and emit to yaml file the key value pairs of path
   std::ofstream yamlfile;
-  std::string yaml_path = ts_runroot + "runroot_path.yaml";
+  std::string yaml_path = Layout::relative_to(ts_runroot, "runroot_path.yml");
   yamlfile.open(yaml_path);
 
   for (auto it : engine.path_map) {
     // out put key value pairs of path
     yamlfile << it.first << ": " << it.second << std::endl;
   }
-  ink_notice("\nTS runroot initialized");
+  ink_notice("TS runroot initialized");
 
   return;
 }

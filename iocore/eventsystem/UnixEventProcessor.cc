@@ -62,9 +62,9 @@ protected:
   void *alloc_numa_stack(EThread *t, size_t stacksize);
 
 private:
-  hwloc_obj_type_t obj_type;
-  int obj_count        = 0;
-  char const *obj_name = nullptr;
+  hwloc_obj_type_t obj_type = HWLOC_OBJ_MACHINE;
+  int obj_count             = 0;
+  char const *obj_name      = nullptr;
 #endif
 };
 
@@ -72,6 +72,52 @@ ThreadAffinityInitializer Thread_Affinity_Initializer;
 
 namespace
 {
+int
+EventMetricStatSync(const char *, RecDataT, RecData *, RecRawStatBlock *rsb, int)
+{
+  int id = 0;
+  EThread::EventMetrics summary[EThread::N_EVENT_TIMESCALES];
+
+  // scan the thread local values
+  for (int i = 0; i < eventProcessor.n_ethreads; ++i) {
+    eventProcessor.all_ethreads[i]->summarize_stats(summary);
+  }
+
+  ink_mutex_acquire(&(rsb->mutex));
+
+  for (int ts_idx = 0; ts_idx < EThread::N_EVENT_TIMESCALES; ++ts_idx, id += EThread::N_EVENT_STATS) {
+    EThread::EventMetrics *m = summary + ts_idx;
+    // Discarding the atomic swaps for global writes, doesn't seem to actually do anything useful.
+    rsb->global[id + EThread::STAT_LOOP_COUNT]->sum   = m->_count;
+    rsb->global[id + EThread::STAT_LOOP_COUNT]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_COUNT);
+
+    rsb->global[id + EThread::STAT_LOOP_WAIT]->sum   = m->_wait;
+    rsb->global[id + EThread::STAT_LOOP_WAIT]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_WAIT);
+
+    rsb->global[id + EThread::STAT_LOOP_TIME_MIN]->sum   = m->_loop_time._min;
+    rsb->global[id + EThread::STAT_LOOP_TIME_MIN]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_TIME_MIN);
+    rsb->global[id + EThread::STAT_LOOP_TIME_MAX]->sum   = m->_loop_time._max;
+    rsb->global[id + EThread::STAT_LOOP_TIME_MAX]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_TIME_MAX);
+
+    rsb->global[id + EThread::STAT_LOOP_EVENTS]->sum   = m->_events._total;
+    rsb->global[id + EThread::STAT_LOOP_EVENTS]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_EVENTS);
+    rsb->global[id + EThread::STAT_LOOP_EVENTS_MIN]->sum   = m->_events._min;
+    rsb->global[id + EThread::STAT_LOOP_EVENTS_MIN]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_EVENTS_MIN);
+    rsb->global[id + EThread::STAT_LOOP_EVENTS_MAX]->sum   = m->_events._max;
+    rsb->global[id + EThread::STAT_LOOP_EVENTS_MAX]->count = 1;
+    RecRawStatUpdateSum(rsb, id + EThread::STAT_LOOP_EVENTS_MAX);
+  }
+
+  ink_mutex_release(&(rsb->mutex));
+  return REC_ERR_OKAY;
+}
+
 /// This is a wrapper used to convert a static function into a continuation. The function pointer is
 /// passed in the cookie. For this reason the class is used as a singleton.
 /// @internal This is the implementation for @c schedule_spawn... overloads.
@@ -331,6 +377,7 @@ EventProcessor::spawn_event_threads(EventType ev_type, int n_threads, size_t sta
   // the group. Some thread set up depends on knowing the total number of threads but that can't be
   // safely updated until all the EThread instances are created and stored in the table.
   for (i = 0; i < n_threads; ++i) {
+    Debug("iocore_thread_start", "Created %s thread #%d", tg->_name.get(), i + 1);
     snprintf(thr_name, MAX_THREAD_NAME_LENGTH, "[%s %d]", tg->_name.get(), i);
     void *stack = Thread_Affinity_Initializer.alloc_stack(tg->_thread[i], stacksize);
     tg->_thread[i]->start(thr_name, stack, stacksize);
@@ -381,6 +428,20 @@ EventProcessor::start(int n_event_threads, size_t stacksize)
   // less because this cannot be done in the constructor - that depends on too much other
   // infrastructure being in place (e.g. the proxy allocators).
   thread_group[ET_CALL]._spawnQueue.push(make_event_for_scheduling(&Thread_Affinity_Initializer, EVENT_IMMEDIATE, nullptr));
+
+  // Get our statistics set up
+  RecRawStatBlock *rsb = RecAllocateRawStatBlock(EThread::N_EVENT_STATS * EThread::N_EVENT_TIMESCALES);
+  char name[256];
+
+  for (int ts_idx = 0; ts_idx < EThread::N_EVENT_TIMESCALES; ++ts_idx) {
+    for (int id = 0; id < EThread::N_EVENT_STATS; ++id) {
+      snprintf(name, sizeof(name), "%s.%ds", EThread::STAT_NAME[id], EThread::SAMPLE_COUNT[ts_idx]);
+      RecRegisterRawStat(rsb, RECT_PROCESS, name, RECD_INT, RECP_NON_PERSISTENT, id + (ts_idx * EThread::N_EVENT_STATS), NULL);
+    }
+  }
+
+  // Name must be that of a stat, pick one at random since we do all of them in one pass/callback.
+  RecRegisterRawStatSyncCb(name, EventMetricStatSync, rsb, 0);
 
   this->spawn_event_threads(ET_CALL, n_event_threads, stacksize);
 

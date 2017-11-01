@@ -323,7 +323,10 @@ TS_INLINE void
 UnixNetVConnection::set_local_addr()
 {
   int local_sa_size = sizeof(local_addr);
-  safe_getsockname(con.fd, &local_addr.sa, &local_sa_size);
+  // This call will fail if fd is closed already. That is ok, because the
+  // `local_addr` is checked within get_local_addr() and the `got_local_addr`
+  // is set only with a valid `local_addr`.
+  ATS_UNUSED_RETURN(safe_getsockname(con.fd, &local_addr.sa, &local_sa_size));
 }
 
 TS_INLINE ink_hrtime
@@ -430,7 +433,6 @@ UnixNetVConnection::set_action(Continuation *c)
 
 // declarations for local use (within the net module)
 
-void close_UnixNetVConnection(UnixNetVConnection *vc, EThread *t);
 void write_to_net(NetHandler *nh, UnixNetVConnection *vc, EThread *thread);
 void write_to_net_io(NetHandler *nh, UnixNetVConnection *vc, EThread *thread);
 

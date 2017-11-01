@@ -1206,6 +1206,7 @@ ParseResult
 url_parse_no_path_component_breakdown(HdrHeap *heap, URLImpl *url, const char **start, const char *end, bool copy_strings_p)
 {
   ParseResult zret = url_parse_scheme(heap, url, start, end, copy_strings_p);
+  url->m_port      = url_canonicalize_port(url->m_url_type, url->m_port);
   return PARSE_RESULT_CONT == zret ? url_parse_http_no_path_component_breakdown(heap, url, start, end, copy_strings_p) : zret;
 }
 
