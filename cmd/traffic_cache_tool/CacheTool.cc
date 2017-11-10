@@ -282,14 +282,14 @@ Stripe::updateLiveData(enum Copy c)
 TS_INLINE int
 vol_headerlen(Stripe *d)
 {
-  return ROUND_TO_STORE_BLOCK(sizeof(CacheDirEntry) + sizeof(uint16_t) * (d->_segments - 1));
+  return ROUND_TO_STORE_BLOCK(sizeof(StripeMeta) + sizeof(uint16_t) * (d->_segments - 1));
 }
 
 size_t
 vol_dirlen(Stripe *d)
 {
   return vol_headerlen(d) + ROUND_TO_STORE_BLOCK(((size_t)d->_buckets) * DIR_DEPTH * d->_segments * SIZEOF_DIR) +
-         ROUND_TO_STORE_BLOCK(sizeof(CacheDirEntry));
+         ROUND_TO_STORE_BLOCK(sizeof(StripeMeta));
 }
 
 #define dir_big(_e) ((uint32_t)((((_e)->w[1]) >> 8) & 0x3))
@@ -464,7 +464,7 @@ dir_freelist_length(Stripe *d, int s)
   int free           = 0;
   CacheDirEntry *seg = dir_segment(s, d);
   //TODO: check freelist[s]; ATS passes s to freelist, I don't know how that works -_-
-  CacheDirEntry *e   = dir_from_offset(d->_meta[0][0].freelist[0], seg);
+  CacheDirEntry *e   = dir_from_offset(d->_meta[0][0].freelist[s], seg);
   if (dir_bucket_loop_fix(e, s, d)) {
     return (DIR_DEPTH - 1) * d->_buckets;
   }
@@ -490,7 +490,7 @@ Stripe::dir_check()
   int32_t chain_mark[MAX_ENTRIES_PER_SEGMENT];
 
   this->loadMeta();
-  // create raw_dir;
+  // create raw_dir pointing at the first ever dir in the stripe;
   char *raw_dir          = (char *)ats_memalign(ats_pagesize(), vol_dirlen(this)-vol_headerlen(this)-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
   dir                    = (CacheDirEntry *)raw_dir;
   uint64_t total_buckets = _segments * _buckets;
