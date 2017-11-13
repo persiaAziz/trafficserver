@@ -183,6 +183,7 @@ struct Stripe {
   /// Directory.
   Chunk _directory;
   CacheDirEntry const *dir = nullptr;
+  uint16_t *freelist       = nullptr;
 };
 
 Stripe::Chunk::~Chunk()
@@ -319,7 +320,7 @@ vol_dirlen(Stripe *d)
 TS_INLINE CacheDirEntry *
 vol_dir_segment(Stripe *d, int s)
 {
-  return (CacheDirEntry *)((d->dir + d->_directory._skip) + (s * d->_buckets) * DIR_DEPTH * SIZEOF_DIR);
+  return (CacheDirEntry *)((d->dir) + (s * d->_buckets) * DIR_DEPTH * SIZEOF_DIR);
 }
 
 TS_INLINE CacheDirEntry *
@@ -463,8 +464,8 @@ dir_freelist_length(Stripe *d, int s)
 {
   int free           = 0;
   CacheDirEntry *seg = dir_segment(s, d);
-  //TODO: check freelist[s]; ATS passes s to freelist, I don't know how that works -_-
-  CacheDirEntry *e   = dir_from_offset(d->_meta[0][0].freelist[s], seg);
+  // TODO: check freelist[s]; ATS passes s to freelist, I don't know how that works -_-
+  CacheDirEntry *e = dir_from_offset(d->freelist[s], seg);
   if (dir_bucket_loop_fix(e, s, d)) {
     return (DIR_DEPTH - 1) * d->_buckets;
   }
@@ -491,8 +492,8 @@ Stripe::dir_check()
 
   this->loadMeta();
   // create raw_dir pointing at the first ever dir in the stripe;
-  char *raw_dir          = (char *)ats_memalign(ats_pagesize(), vol_dirlen(this)-vol_headerlen(this)-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
-  dir                    = (CacheDirEntry *)raw_dir;
+  char *raw_dir          = (char *)ats_memalign(ats_pagesize(), vol_dirlen(this));
+  dir                    = reinterpret_cast<CacheDirEntry *>(raw_dir + vol_headerlen(this));
   uint64_t total_buckets = _segments * _buckets;
   uint64_t total_entries = total_buckets * DIR_DEPTH;
   int frag_demographics[1 << DIR_SIZE_WIDTH][DIR_BLOCK_SIZES];
@@ -508,8 +509,8 @@ Stripe::dir_check()
   std::cout << "  Buckets per segment:  " << _buckets << std::endl;
   std::cout << "  Entries:  " << _segments * _buckets * DIR_DEPTH << std::endl;
   int fd = _span->_fd;
-  //read directory
-  pread(fd, raw_dir, vol_dirlen(this)-vol_headerlen(this)-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), vol_headerlen(this));
+  // read directory
+  pread(fd, raw_dir, vol_dirlen(this), this->_start);
   for (int s = 0; s < _segments; s++) {
     CacheDirEntry *seg     = dir_segment(s, this);
     int seg_chain_max      = 0;
@@ -622,7 +623,7 @@ Stripe::loadMeta()
   std::unique_ptr<char> bulk_buff;                      // Buffer for bulk reads.
   static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
   alignas(SBSIZE) char stripe_buff[SBSIZE];             // Use when reading a single stripe block.
-
+  alignas(SBSIZE) char stripe_buff2[SBSIZE];            // use to save the stripe freelist
   if (io_align > SBSIZE)
     return Errata::Message(0, 1, "Cannot load stripe ", _idx, " on span ", _span->_path, " because the I/O block alignment ",
                            io_align, " is larger than the buffer alignment ", SBSIZE);
@@ -631,13 +632,13 @@ Stripe::loadMeta()
 
   // Header A must be at the start of the stripe block.
   // Todo: really need to check pread() for failure.
-  n.assign(pread(fd, stripe_buff, SBSIZE, pos));
-  data.setView(stripe_buff, n);
+  ssize_t headerbyteCount = pread(fd, stripe_buff2, SBSIZE, pos);
+  n.assign(headerbyteCount);
+  data.setView(stripe_buff2, n);
   meta = data.template at_ptr<StripeMeta>(0);
   // TODO:: We need to read more data at this point  to populate dir
-  dir = data.template at_ptr<CacheDirEntry>(vol_headerlen(this));
   if (this->validateMeta(meta)) {
-    delta              = Bytes(data.template at_ptr<char>(0) - stripe_buff);
+    delta              = Bytes(data.template at_ptr<char>(0) - stripe_buff2);
     _meta[A][HEAD]     = *meta;
     _meta_pos[A][HEAD] = round_down(pos + Bytes(delta));
     pos += round_up(SBSIZE);
@@ -709,6 +710,14 @@ Stripe::loadMeta()
       zret.push(0, 1, "Invalid stripe data - candidates found but sync serial data not valid.");
     }
   }
+
+  n.assign(headerbyteCount);
+  data.setView(stripe_buff2, n);
+  meta = data.template at_ptr<StripeMeta>(0);
+  // copy freelist
+  freelist = (uint16_t *)malloc(_segments * sizeof(uint16_t));
+  for (int i    = 0; i < _segments; i++)
+    freelist[i] = meta->freelist[i];
 
   if (!zret)
     _directory.clear();
