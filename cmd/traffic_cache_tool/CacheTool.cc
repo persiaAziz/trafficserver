@@ -54,7 +54,9 @@ using ts::FilePath;
 using ts::MemView;
 using ts::CacheDirEntry;
 
+constexpr int ESTIMATED_OBJECT_SIZE = 8000;
 constexpr int VOL_HASH_TABLE_SIZE = 32707;
+int cache_config_min_average_object_size       = ESTIMATED_OBJECT_SIZE;
 CacheStoreBlocks Vol_hash_alloc_size(1024);
 constexpr unsigned short VOL_HASH_EMPTY = 65535;
 constexpr int DIR_TAG_WIDTH             = 12;
@@ -163,7 +165,7 @@ struct Stripe {
 
   Span *_span;           ///< Hosting span.
   INK_MD5 hash_id;       /// hash_id
-  Bytes _start;          ///< Offset of first byte of stripe.
+  Bytes _start;          ///< Offset of first byte of stripe metadata.
   Bytes _content;        ///< Start of content.
   CacheStoreBlocks _len; ///< Length of stripe.
   uint8_t _vol_idx = 0;  ///< Volume index.
@@ -249,32 +251,6 @@ Stripe::probeMeta(MemView &mem, StripeMeta const *base_meta)
   return false;
 }
 
-void
-Stripe::updateLiveData(enum Copy c)
-{
-  CacheStoreBlocks delta{_meta_pos[c][FOOT] - _meta_pos[c][HEAD]};
-  CacheStoreBlocks header_len(0);
-  int64_t n_buckets;
-  int64_t n_segments;
-
-  // Past the header is the segment free list heads which if sufficiently long (> ~4K) can take
-  // more than 1 store block. Start with a guess of 1 and adjust upwards as needed. A 2TB stripe
-  // with an AOS of 8000 has roughly 3700 segments meaning that for even 10TB drives this loop
-  // should only be a few iterations.
-  do {
-    ++header_len;
-    n_buckets  = Bytes(delta - header_len) / (sizeof(CacheDirEntry) * ts::ENTRIES_PER_BUCKET);
-    n_segments = n_buckets / ts::MAX_BUCKETS_PER_SEGMENT;
-    // This should never be more than one loop, usually none.
-    while ((n_buckets / n_segments) > ts::MAX_BUCKETS_PER_SEGMENT)
-      ++n_segments;
-  } while ((sizeof(StripeMeta) + sizeof(uint16_t) * n_segments) > static_cast<size_t>(header_len));
-
-  _buckets         = n_buckets / n_segments;
-  _segments        = n_segments;
-  _directory._skip = header_len;
-}
-
 /* INK_ALIGN() is only to be used to align on a power of 2 boundary */
 #define INK_ALIGN(size, boundary) (((size) + ((boundary)-1)) & ~((boundary)-1))
 
@@ -292,6 +268,59 @@ vol_dirlen(Stripe *d)
   return vol_headerlen(d) + ROUND_TO_STORE_BLOCK(((size_t)d->_buckets) * DIR_DEPTH * d->_segments * SIZEOF_DIR) +
          ROUND_TO_STORE_BLOCK(sizeof(StripeMeta));
 }
+
+
+static void
+vol_init_data_internal(Stripe *d)
+{
+  int cache_config_min_average_object_size       = ESTIMATED_OBJECT_SIZE;
+  d->_buckets  = ((d->_len.count()*8192 - (d->_content - d->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
+  d->_segments = (d->_buckets + (((1 << 16) - 1) / DIR_DEPTH)) / ((1 << 16) / DIR_DEPTH);
+  d->_buckets  = (d->_buckets + d->_segments - 1) / d->_segments;
+  d->_content    = d->_start + Bytes(2 * vol_dirlen(d));
+}
+
+static void
+vol_init_data(Stripe *d)
+{
+  // iteratively calculate start + buckets
+  vol_init_data_internal(d);
+  vol_init_data_internal(d);
+  vol_init_data_internal(d);
+}
+
+void
+Stripe::updateLiveData(enum Copy c)
+{
+  CacheStoreBlocks delta{_meta_pos[c][FOOT] - _meta_pos[c][HEAD]};
+  CacheStoreBlocks header_len(0);
+  int64_t n_buckets;
+  int64_t n_segments;
+
+  _content = _start;
+  vol_init_data(this);
+  /*
+   * COMMENTING THIS SECTION FOR NOW TO USE THE EXACT LOGIN USED IN ATS TO CALCULATE THE NUMBER OF SEGMENTS AND BUCKETS
+  // Past the header is the segment free list heads which if sufficiently long (> ~4K) can take
+  // more than 1 store block. Start with a guess of 1 and adjust upwards as needed. A 2TB stripe
+  // with an AOS of 8000 has roughly 3700 segments meaning that for even 10TB drives this loop
+  // should only be a few iterations.
+  do {
+    ++header_len;
+    n_buckets  = Bytes(delta - header_len) / (sizeof(CacheDirEntry) * ts::ENTRIES_PER_BUCKET);
+    n_segments = n_buckets / ts::MAX_BUCKETS_PER_SEGMENT;
+    // This should never be more than one loop, usually none.
+    while ((n_buckets / n_segments) > ts::MAX_BUCKETS_PER_SEGMENT)
+      ++n_segments;
+  } while ((sizeof(StripeMeta) + sizeof(uint16_t) * n_segments) > static_cast<size_t>(header_len));
+
+  _buckets         = n_buckets / n_segments;
+  _segments        = n_segments;
+  */
+  _directory._skip = header_len;
+}
+
+
 
 #define dir_big(_e) ((uint32_t)((((_e)->w[1]) >> 8) & 0x3))
 #define dir_bit(_e, _w, _b) ((uint32_t)(((_e)->w[_w] >> (_b)) & 1))
