@@ -1886,7 +1886,7 @@ Clear_Span(std::string devicePath)
   if ((zret = cache.loadSpan(SpanFile))) {
     cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
     for (auto sp : cache._spans) {
-      if (0 == strncmp(sp->_path.path(), devicePath.data(), devicePath.size())) {
+      if (devicePath.size()>0 && 0 == strncmp(sp->_path.path(), devicePath.data(), devicePath.size())) {
         printf("clearing %s\n", devicePath.data());
         sp->clearPermanently();
       }
