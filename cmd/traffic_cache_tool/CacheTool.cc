@@ -190,6 +190,13 @@ struct Stripe {
   int dir_freelist_length(int s);
   TS_INLINE CacheDirEntry *dir_segment(int s);
   TS_INLINE CacheDirEntry *vol_dir_segment(int s);
+  size_t vol_dirlen();
+  TS_INLINE int vol_headerlen();
+  void vol_init_data_internal();
+  void vol_init_data();
+  int dir_bucket_loop_fix(CacheDirEntry *start_dir, int s);
+  void dir_init_segment(int s);
+  void dir_free_entry(CacheDirEntry *e, int s);
 };
 
 Stripe::Chunk::~Chunk()
@@ -261,35 +268,36 @@ Stripe::probeMeta(MemView &mem, StripeMeta const *base_meta)
 #define ROUND_TO_STORE_BLOCK(_x) INK_ALIGN((_x), 8192)
 
 TS_INLINE int
-vol_headerlen(Stripe *d)
+Stripe::vol_headerlen()
 {
-  return ROUND_TO_STORE_BLOCK(sizeof(StripeMeta) + sizeof(uint16_t) * (d->_segments - 1));
+  return ROUND_TO_STORE_BLOCK(sizeof(StripeMeta) + sizeof(uint16_t) * (this->_segments - 1));
 }
 
 size_t
-vol_dirlen(Stripe *d)
+Stripe::vol_dirlen()
 {
-  return vol_headerlen(d) + ROUND_TO_STORE_BLOCK(((size_t)d->_buckets) * DIR_DEPTH * d->_segments * SIZEOF_DIR) +
+  return vol_headerlen() + ROUND_TO_STORE_BLOCK(((size_t)this->_buckets) * DIR_DEPTH * this->_segments * SIZEOF_DIR) +
          ROUND_TO_STORE_BLOCK(sizeof(StripeMeta));
 }
 
-static void
-vol_init_data_internal(Stripe *d)
+void
+Stripe::vol_init_data_internal()
 {
   int cache_config_min_average_object_size = ESTIMATED_OBJECT_SIZE;
-  d->_buckets  = ((d->_len.count() * 8192 - (d->_content - d->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
-  d->_segments = (d->_buckets + (((1 << 16) - 1) / DIR_DEPTH)) / ((1 << 16) / DIR_DEPTH);
-  d->_buckets  = (d->_buckets + d->_segments - 1) / d->_segments;
-  d->_content  = d->_start + Bytes(2 * vol_dirlen(d));
+  this->_buckets =
+    ((this->_len.count() * 8192 - (this->_content - this->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
+  this->_segments = (this->_buckets + (((1 << 16) - 1) / DIR_DEPTH)) / ((1 << 16) / DIR_DEPTH);
+  this->_buckets  = (this->_buckets + this->_segments - 1) / this->_segments;
+  this->_content  = this->_start + Bytes(2 * vol_dirlen());
 }
 
-static void
-vol_init_data(Stripe *d)
+void
+Stripe::vol_init_data()
 {
   // iteratively calculate start + buckets
-  vol_init_data_internal(d);
-  vol_init_data_internal(d);
-  vol_init_data_internal(d);
+  this->vol_init_data_internal();
+  this->vol_init_data_internal();
+  this->vol_init_data_internal();
 }
 
 void
@@ -301,7 +309,7 @@ Stripe::updateLiveData(enum Copy c)
   int64_t n_segments;
 
   _content = _start;
-  vol_init_data(this);
+  this->vol_init_data();
   /*
    * COMMENTING THIS SECTION FOR NOW TO USE THE EXACT LOGIN USED IN ATS TO CALCULATE THE NUMBER OF SEGMENTS AND BUCKETS
   // Past the header is the segment free list heads which if sufficiently long (> ~4K) can take
@@ -418,31 +426,31 @@ dir_to_offset(const CacheDirEntry *d, const CacheDirEntry *seg)
 }
 
 void
-dir_free_entry(CacheDirEntry *e, int s, Stripe *d)
+Stripe::dir_free_entry(CacheDirEntry *e, int s)
 {
-  CacheDirEntry *seg = d->dir_segment(s);
-  unsigned int fo    = d->_meta[0][0].freelist[s];
+  CacheDirEntry *seg = this->dir_segment(s);
+  unsigned int fo    = this->_meta[0][0].freelist[s];
   unsigned int eo    = dir_to_offset(e, seg);
   dir_set_next(e, fo);
   if (fo) {
     dir_set_prev(dir_from_offset(fo, seg), eo);
   }
-  d->_meta[0][0].freelist[s] = eo;
+  this->_meta[0][0].freelist[s] = eo;
 }
 
 // adds all the directory entries
 // in a segment to the segment freelist
 void
-dir_init_segment(int s, Stripe *d)
+Stripe::dir_init_segment(int s)
 {
-  d->_meta[0][0].freelist[s] = 0;
-  CacheDirEntry *seg         = d->dir_segment(s);
+  this->_meta[0][0].freelist[s] = 0;
+  CacheDirEntry *seg            = this->dir_segment(s);
   int l, b;
-  memset(seg, 0, SIZEOF_DIR * DIR_DEPTH * d->_buckets);
+  memset(seg, 0, SIZEOF_DIR * DIR_DEPTH * this->_buckets);
   for (l = 1; l < DIR_DEPTH; l++) {
-    for (b = 0; b < d->_buckets; b++) {
+    for (b = 0; b < this->_buckets; b++) {
       CacheDirEntry *bucket = dir_bucket(b, seg);
-      dir_free_entry(dir_bucket_row(bucket, l), s, d);
+      this->dir_free_entry(dir_bucket_row(bucket, l), s);
     }
   }
 }
@@ -486,10 +494,10 @@ dir_bucket_loop_check(CacheDirEntry *start_dir, CacheDirEntry *seg)
 // Note : abuse of the token bit in dir entries
 
 int
-dir_bucket_loop_fix(CacheDirEntry *start_dir, int s, Stripe *d)
+Stripe::dir_bucket_loop_fix(CacheDirEntry *start_dir, int s)
 {
-  if (!dir_bucket_loop_check(start_dir, d->dir_segment(s))) {
-    dir_init_segment(s, d);
+  if (!dir_bucket_loop_check(start_dir, this->dir_segment(s))) {
+    this->dir_init_segment(s);
     return 1;
   }
   return 0;
@@ -502,7 +510,7 @@ Stripe::dir_freelist_length(int s)
   CacheDirEntry *seg = this->dir_segment(s);
   // TODO: check freelist[s]; ATS passes s to freelist, I don't know how that works -_-
   CacheDirEntry *e = dir_from_offset(this->freelist[s], seg);
-  if (dir_bucket_loop_fix(e, s, this)) {
+  if (this->dir_bucket_loop_fix(e, s)) {
     return (DIR_DEPTH - 1) * this->_buckets;
   }
   while (e) {
@@ -528,8 +536,8 @@ Stripe::dir_check()
 
   this->loadMeta();
   // create raw_dir pointing at the first ever dir in the stripe;
-  char *raw_dir          = (char *)ats_memalign(ats_pagesize(), vol_dirlen(this));
-  dir                    = (CacheDirEntry *)(raw_dir + vol_headerlen(this));
+  char *raw_dir          = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
+  dir                    = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
   uint64_t total_buckets = _segments * _buckets;
   uint64_t total_entries = total_buckets * DIR_DEPTH;
   int frag_demographics[1 << DIR_SIZE_WIDTH][DIR_BLOCK_SIZES];
@@ -546,7 +554,7 @@ Stripe::dir_check()
   std::cout << "  Entries:  " << _segments * _buckets * DIR_DEPTH << std::endl;
   int fd = _span->_fd;
   // read directory
-  pread(fd, raw_dir, vol_dirlen(this), this->_start);
+  pread(fd, raw_dir, this->vol_dirlen(), this->_start);
   for (int s = 0; s < _segments; s++) {
     CacheDirEntry *seg     = this->dir_segment(s);
     int seg_chain_max      = 0;
