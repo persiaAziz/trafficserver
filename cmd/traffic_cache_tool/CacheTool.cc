@@ -349,7 +349,7 @@ Stripe::updateLiveData(enum Copy c)
 TS_INLINE CacheDirEntry *
 vol_dir_segment(Stripe *d, int s)
 {
-  return (CacheDirEntry *)((d->dir) + (s * d->_buckets) * DIR_DEPTH * SIZEOF_DIR);
+  return (CacheDirEntry *)(((char *)d->dir) + (s * d->_buckets) * DIR_DEPTH * SIZEOF_DIR);
 }
 
 TS_INLINE CacheDirEntry *
@@ -522,7 +522,7 @@ Stripe::dir_check()
   this->loadMeta();
   // create raw_dir pointing at the first ever dir in the stripe;
   char *raw_dir          = (char *)ats_memalign(ats_pagesize(), vol_dirlen(this));
-  dir                    = reinterpret_cast<CacheDirEntry *>(raw_dir + vol_headerlen(this));
+  dir                    = (CacheDirEntry *)(raw_dir + vol_headerlen(this));
   uint64_t total_buckets = _segments * _buckets;
   uint64_t total_entries = total_buckets * DIR_DEPTH;
   int frag_demographics[1 << DIR_SIZE_WIDTH][DIR_BLOCK_SIZES];
