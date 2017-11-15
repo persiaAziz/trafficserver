@@ -42,6 +42,7 @@
 #include <openssl/md5.h>
 #include <vector>
 #include <unordered_set>
+#include <time.h>
 
 using ts::Bytes;
 using ts::Megabytes;
@@ -54,9 +55,9 @@ using ts::FilePath;
 using ts::MemView;
 using ts::CacheDirEntry;
 
-constexpr int ESTIMATED_OBJECT_SIZE = 8000;
-constexpr int VOL_HASH_TABLE_SIZE = 32707;
-int cache_config_min_average_object_size       = ESTIMATED_OBJECT_SIZE;
+constexpr int ESTIMATED_OBJECT_SIZE      = 8000;
+constexpr int VOL_HASH_TABLE_SIZE        = 32707;
+int cache_config_min_average_object_size = ESTIMATED_OBJECT_SIZE;
 CacheStoreBlocks Vol_hash_alloc_size(1024);
 constexpr unsigned short VOL_HASH_EMPTY = 65535;
 constexpr int DIR_TAG_WIDTH             = 12;
@@ -186,6 +187,9 @@ struct Stripe {
   Chunk _directory;
   CacheDirEntry const *dir = nullptr;
   uint16_t *freelist       = nullptr;
+  int dir_freelist_length(int s);
+  TS_INLINE CacheDirEntry *dir_segment(int s);
+  TS_INLINE CacheDirEntry *vol_dir_segment(int s);
 };
 
 Stripe::Chunk::~Chunk()
@@ -269,15 +273,14 @@ vol_dirlen(Stripe *d)
          ROUND_TO_STORE_BLOCK(sizeof(StripeMeta));
 }
 
-
 static void
 vol_init_data_internal(Stripe *d)
 {
-  int cache_config_min_average_object_size       = ESTIMATED_OBJECT_SIZE;
-  d->_buckets  = ((d->_len.count()*8192 - (d->_content - d->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
+  int cache_config_min_average_object_size = ESTIMATED_OBJECT_SIZE;
+  d->_buckets  = ((d->_len.count() * 8192 - (d->_content - d->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
   d->_segments = (d->_buckets + (((1 << 16) - 1) / DIR_DEPTH)) / ((1 << 16) / DIR_DEPTH);
   d->_buckets  = (d->_buckets + d->_segments - 1) / d->_segments;
-  d->_content    = d->_start + Bytes(2 * vol_dirlen(d));
+  d->_content  = d->_start + Bytes(2 * vol_dirlen(d));
 }
 
 static void
@@ -320,8 +323,6 @@ Stripe::updateLiveData(enum Copy c)
   _directory._skip = header_len;
 }
 
-
-
 #define dir_big(_e) ((uint32_t)((((_e)->w[1]) >> 8) & 0x3))
 #define dir_bit(_e, _w, _b) ((uint32_t)(((_e)->w[_w] >> (_b)) & 1))
 #define dir_size(_e) ((uint32_t)(((_e)->w[1]) >> 10))
@@ -337,7 +338,7 @@ Stripe::updateLiveData(enum Copy c)
     (_e)->w[1] = (uint16_t)((((_o) >> 16) & 0xFF) | ((_e)->w[1] & 0xFF00)); \
     (_e)->w[4] = (uint16_t)((_o) >> 24);                                    \
   } while (0)
-#define dir_segment(_s, _d) vol_dir_segment(_d, _s)
+//#define dir_segment(_s, _d) vol_dir_segment(_d, _s)
 #define dir_in_seg(_s, _i) ((CacheDirEntry *)(((char *)(_s)) + (SIZEOF_DIR * (_i))))
 #define dir_next(_e) (_e)->w[3]
 #define dir_phase(_e) dir_bit(_e, 2, 12)
@@ -347,9 +348,15 @@ Stripe::updateLiveData(enum Copy c)
 #define dir_set_next(_e, _o) (_e)->w[3] = (uint16_t)(_o)
 
 TS_INLINE CacheDirEntry *
-vol_dir_segment(Stripe *d, int s)
+Stripe::dir_segment(int s)
 {
-  return (CacheDirEntry *)(((char *)d->dir) + (s * d->_buckets) * DIR_DEPTH * SIZEOF_DIR);
+  return vol_dir_segment(s);
+}
+
+TS_INLINE CacheDirEntry *
+Stripe::vol_dir_segment(int s)
+{
+  return (CacheDirEntry *)(((char *)this->dir) + (s * this->_buckets) * DIR_DEPTH * SIZEOF_DIR);
 }
 
 TS_INLINE CacheDirEntry *
@@ -413,7 +420,7 @@ dir_to_offset(const CacheDirEntry *d, const CacheDirEntry *seg)
 void
 dir_free_entry(CacheDirEntry *e, int s, Stripe *d)
 {
-  CacheDirEntry *seg = dir_segment(s, d);
+  CacheDirEntry *seg = d->dir_segment(s);
   unsigned int fo    = d->_meta[0][0].freelist[s];
   unsigned int eo    = dir_to_offset(e, seg);
   dir_set_next(e, fo);
@@ -429,7 +436,7 @@ void
 dir_init_segment(int s, Stripe *d)
 {
   d->_meta[0][0].freelist[s] = 0;
-  CacheDirEntry *seg         = dir_segment(s, d);
+  CacheDirEntry *seg         = d->dir_segment(s);
   int l, b;
   memset(seg, 0, SIZEOF_DIR * DIR_DEPTH * d->_buckets);
   for (l = 1; l < DIR_DEPTH; l++) {
@@ -481,7 +488,7 @@ dir_bucket_loop_check(CacheDirEntry *start_dir, CacheDirEntry *seg)
 int
 dir_bucket_loop_fix(CacheDirEntry *start_dir, int s, Stripe *d)
 {
-  if (!dir_bucket_loop_check(start_dir, dir_segment(s, d))) {
+  if (!dir_bucket_loop_check(start_dir, d->dir_segment(s))) {
     dir_init_segment(s, d);
     return 1;
   }
@@ -489,14 +496,14 @@ dir_bucket_loop_fix(CacheDirEntry *start_dir, int s, Stripe *d)
 }
 
 int
-dir_freelist_length(Stripe *d, int s)
+Stripe::dir_freelist_length(int s)
 {
   int free           = 0;
-  CacheDirEntry *seg = dir_segment(s, d);
+  CacheDirEntry *seg = this->dir_segment(s);
   // TODO: check freelist[s]; ATS passes s to freelist, I don't know how that works -_-
-  CacheDirEntry *e = dir_from_offset(d->freelist[s], seg);
-  if (dir_bucket_loop_fix(e, s, d)) {
-    return (DIR_DEPTH - 1) * d->_buckets;
+  CacheDirEntry *e = dir_from_offset(this->freelist[s], seg);
+  if (dir_bucket_loop_fix(e, s, this)) {
+    return (DIR_DEPTH - 1) * this->_buckets;
   }
   while (e) {
     free++;
@@ -541,7 +548,7 @@ Stripe::dir_check()
   // read directory
   pread(fd, raw_dir, vol_dirlen(this), this->_start);
   for (int s = 0; s < _segments; s++) {
-    CacheDirEntry *seg     = dir_segment(s, this);
+    CacheDirEntry *seg     = this->dir_segment(s);
     int seg_chain_max      = 0;
     int seg_empty          = 0;
     int seg_in_use         = 0;
@@ -611,7 +618,7 @@ Stripe::dir_check()
       ++hist[std::min(h, SEGMENT_HISTOGRAM_WIDTH)];
       seg_chain_max = std::max(seg_chain_max, h);
     }
-    int fl_size = dir_freelist_length(this, s);
+    int fl_size = dir_freelist_length(s);
     in_use += seg_in_use;
     empty += seg_empty;
     stale += seg_stale;
@@ -624,6 +631,51 @@ Stripe::dir_check()
            s, seg_in_use, seg_stale, fl_size, seg_bytes_in_use, seg_buckets_in_use, seg_empty, seg_chain_max,
            seg_buckets_in_use ? static_cast<float>(seg_in_use + seg_stale) / seg_buckets_in_use : 0.0, seg_dups);
   }
+  //////////////////
+
+  printf("  - Stripe | Entries: in-use=%d stale=%d free=%d Buckets: empty=%d max=%d avg=%.2f\n", in_use, stale, free, empty,
+         max_chain_length, buckets_in_use ? static_cast<float>(in_use + stale) / buckets_in_use : 0);
+
+  printf("    Chain lengths:  ");
+  for (j = 0; j < SEGMENT_HISTOGRAM_WIDTH; ++j) {
+    printf(" %d=%d ", j, hist[j]);
+  }
+  printf(" %d>=%d\n", SEGMENT_HISTOGRAM_WIDTH, hist[SEGMENT_HISTOGRAM_WIDTH]);
+
+  char tt[256];
+  printf("    Total Size:      %" PRIu64 "\n", static_cast<uint64_t>(_len.count()));
+  printf("    Bytes in Use:    %" PRIu64 " [%0.2f%%]\n", bytes_in_use, 100.0 * (static_cast<float>(bytes_in_use) / _len.count()));
+  printf("    Objects:         %d\n", head);
+  printf("    Average Size:    %" PRIu64 "\n", head ? (bytes_in_use / head) : 0);
+  printf("    Average Frags:   %.2f\n", head ? static_cast<float>(in_use) / head : 0);
+  printf("    Write Position:  %" PRIu64 "\n", _meta[0][0].write_pos - _content.count());
+  printf("    Wrap Count:      %d\n", _meta[0][0].cycle);
+  printf("    Phase:           %s\n", _meta[0][0].phase ? "true" : "false");
+  ctime_r(&_meta[0][0].create_time, tt);
+  tt[strlen(tt) - 1] = 0;
+  printf("    Sync Serial:     %u\n", _meta[0][0].sync_serial);
+  printf("    Write Serial:    %u\n", _meta[0][0].write_serial);
+  printf("    Create Time:     %s\n", tt);
+  printf("\n");
+  printf("  Fragment size demographics\n");
+  for (int b = 0; b < DIR_BLOCK_SIZES; ++b) {
+    int block_size = DIR_BLOCK_SIZE(b);
+    int s          = 0;
+    while (s < 1 << DIR_SIZE_WIDTH) {
+      for (int j = 0; j < 8; ++j, ++s) {
+        // The size markings are redundant. Low values (less than DIR_SHIFT_WIDTH) for larger
+        // base block sizes should never be used. Such entries should use the next smaller base block size.
+        if (b > 0 && s < 1 << DIR_BLOCK_SHIFT(1)) {
+          assert(frag_demographics[s][b] == 0);
+          continue;
+        }
+        printf(" %8d[%2d:%1d]:%06d", (s + 1) * block_size, s, b, frag_demographics[s][b]);
+      }
+      printf("\n");
+    }
+  }
+  printf("\n");
+  ////////////////
 }
 
 Errata
@@ -1814,6 +1866,7 @@ dir_check()
       stripe->dir_check();
     }
   }
+  printf("\nCHECK succeeded\n");
   return zret;
 }
 
