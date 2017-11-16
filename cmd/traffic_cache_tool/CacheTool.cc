@@ -44,6 +44,10 @@
 #include <unordered_set>
 #include <time.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
+
 using ts::Bytes;
 using ts::Megabytes;
 using ts::CacheStoreBlocks;
@@ -1291,9 +1295,9 @@ Cache::dumpSpans(SpanDumpDepth depth)
       if (nullptr == span->_header) {
         std::cout << "Span: " << span->_path << " is uninitialized" << std::endl;
       } else {
-        std::cout << "Span: " << span->_path << " " << span->_header->num_volumes << " Volumes " << span->_header->num_used
-                  << " in use " << span->_header->num_free << " free " << span->_header->num_diskvol_blks << " stripes "
-                  << span->_header->num_blocks.value() << " blocks" << std::endl;
+        std::cout << "Span: " << span->_path << "  #Volumes: " << span->_header->num_volumes <<"  #in use: "<< span->_header->num_used
+                  << "  #free: " << span->_header->num_free << "  #stripes: " << span->_header->num_diskvol_blks << "  Len(bytes): "
+                  << span->_header->num_blocks.value() << std::endl;
 
         for (auto stripe : span->_stripes) {
           std::cout << "    : "
