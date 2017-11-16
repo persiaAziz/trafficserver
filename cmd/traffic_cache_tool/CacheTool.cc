@@ -1899,6 +1899,14 @@ Clear_Span(std::string devicePath)
   return zret;
 }
 
+Errata
+Check_Freelist(std::string devicePath)
+{
+    Errata zret;
+    printf("cache or cash %s\n",devicePath.data());
+    return zret;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1937,7 +1945,9 @@ main(int argc, char *argv[])
     .subCommand(std::string("stripes"), std::string("List the stripes"),
                 []() { return List_Stripes(Cache::SpanDumpDepth::STRIPE); });
   Commands.add(std::string("clear"), std::string("Clear spans"), &Clear_Spans);
-  Commands.add(std::string("check"), std::string("cache check"), &dir_check);
+  Commands.add(std::string("dir_check"), std::string("cache check"))
+    .subCommand(std::string("full"), std::string("Full report of the cache storage"),  &dir_check)
+    .subCommand(std::string("freelist"),std::string("check the freelist for loop"), [&](int, char *argv[]) {return Check_Freelist(inputFile); });
   Commands.add(std::string("volumes"), std::string("Volumes"), &Simulate_Span_Allocation);
   Commands.add(std::string("alloc"), std::string("Storage allocation"))
     .subCommand(std::string("free"), std::string("Allocate storage on free (empty) spans"), &Cmd_Allocate_Empty_Spans);
