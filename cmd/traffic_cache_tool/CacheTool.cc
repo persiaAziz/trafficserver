@@ -1222,7 +1222,7 @@ Cache::loadSpanConfig(FilePath const &path)
     while (content) {
       ts::TextView line = content.take_prefix_at('\n');
       line.ltrim_if(&isspace);
-      if (!line || '#' == *line)
+      if (line.empty() || '#' == *line)
         continue;
       ts::TextView path = line.take_prefix_if(&isspace);
       if (path) {
@@ -1904,6 +1904,25 @@ Check_Freelist(std::string devicePath)
 {
   Errata zret;
   printf("cache or cash %s\n", devicePath.data());
+  Cache cache;
+  if ((zret = cache.loadSpan(SpanFile)))
+  {
+      for (auto sp : cache._spans) {
+          printf("cache or cash %s\n", sp->_path.path());
+        if (devicePath.size() > 0 && 0 == strncmp(sp->_path.path(), devicePath.data(), devicePath.size()))
+        {
+            printf("Scanning %s\n",devicePath.data());
+            for (auto strp: sp->_stripes)
+            {
+                for(int s=0;s<strp->_segments;s++)
+                {
+                    int freelist = strp->dir_freelist_length(s);
+                    printf("freelist available %d\n",freelist);
+                }
+            }
+        }
+      }
+  }
   return zret;
 }
 
@@ -1945,9 +1964,9 @@ main(int argc, char *argv[])
     .subCommand(std::string("stripes"), std::string("List the stripes"),
                 []() { return List_Stripes(Cache::SpanDumpDepth::STRIPE); });
   Commands.add(std::string("clear"), std::string("Clear spans"), &Clear_Spans);
-  Commands.add(std::string("dir_check"), std::string("cache check"))
-    .subCommand(std::string("full"), std::string("Full report of the cache storage"), &dir_check)
-    .subCommand(std::string("freelist"), std::string("check the freelist for loop"),
+  auto& c = Commands.add(std::string("dir_check"), std::string("cache check"));
+    c.subCommand(std::string("full"), std::string("Full report of the cache storage"), &dir_check);
+    c.subCommand(std::string("freelist"), std::string("check the freelist for loop"),
                 [&](int, char *argv[]) { return Check_Freelist(inputFile); });
   Commands.add(std::string("volumes"), std::string("Volumes"), &Simulate_Span_Allocation);
   Commands.add(std::string("alloc"), std::string("Storage allocation"))
