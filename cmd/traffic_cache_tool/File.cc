@@ -47,15 +47,15 @@ path_join(ts::string_view lhs, ts::string_view rhs)
   std::string x;
   x.resize(ln + rn + 2);
 
-  memcpy(const_cast<char*>(x.data()), lhs.data(), ln);
+  memcpy(const_cast<char *>(x.data()), lhs.data(), ln);
   x[ln] = '/';
-  memcpy(const_cast<char*>(x.data()) + ln + 1, rptr, rn);
+  memcpy(const_cast<char *>(x.data()) + ln + 1, rptr, rn);
   x[ln + rn + 1] = 0; // terminate string.
 
   return x;
 }
 
-  FilePath &
+FilePath &
 FilePath::operator=(char const *path)
 {
   _path   = ats_strdup(path);
@@ -86,7 +86,7 @@ operator/(char const *lhs, FilePath const &rhs)
   if (!rhs.has_path())
     return FilePath(lhs);
 
-  return FilePath(path_join(lhs, static_cast<const char*>(rhs)));
+  return FilePath(path_join(lhs, static_cast<const char *>(rhs)));
 }
 
 ats_scoped_fd
@@ -104,7 +104,7 @@ BulkFile::load()
   if (0 == fstat(fd, &info)) {
     size_t n = info.st_size;
     _content.resize(n + 2);
-    auto data = const_cast<char*>(_content.data());
+    auto data = const_cast<char *>(_content.data());
     if (0 < (_len = read(fd, data, n))) {
       // Force a trailing linefeed and nul.
       memset(data + _len, 0, 2);

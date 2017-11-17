@@ -395,7 +395,7 @@ public:
   /// Construct with contained resource.
   explicit ats_scoped_fd(value_type rt) : super_type(rt) {}
   /// Move ownership constructor.
-  ats_scoped_fd(self_type && that) : super_type(that.release()) {}
+  ats_scoped_fd(self_type &&that) : super_type(that.release()) {}
   /** Place a new resource @a rt in the container.
       Any resource currently contained is destroyed.
       This object becomes the owner of @a rt.

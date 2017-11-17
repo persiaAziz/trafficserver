@@ -308,8 +308,8 @@ Stripe::updateLiveData(enum Copy c)
 {
   CacheStoreBlocks delta{_meta_pos[c][FOOT] - _meta_pos[c][HEAD]};
   CacheStoreBlocks header_len(0);
-//  int64_t n_buckets;
-//  int64_t n_segments;
+  //  int64_t n_buckets;
+  //  int64_t n_segments;
 
   _content = _start;
   this->vol_init_data();
@@ -539,10 +539,10 @@ Stripe::dir_check()
 
   this->loadMeta();
   // create raw_dir pointing at the first ever dir in the stripe;
-  char *raw_dir          = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
-  dir                    = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
-//  uint64_t total_buckets = _segments * _buckets;
-//  uint64_t total_entries = total_buckets * DIR_DEPTH;
+  char *raw_dir = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
+  dir           = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
+  //  uint64_t total_buckets = _segments * _buckets;
+  //  uint64_t total_entries = total_buckets * DIR_DEPTH;
   int frag_demographics[1 << DIR_SIZE_WIDTH][DIR_BLOCK_SIZES];
   int j;
   int stale = 0, in_use = 0, empty = 0;
@@ -1294,9 +1294,10 @@ Cache::dumpSpans(SpanDumpDepth depth)
       if (nullptr == span->_header) {
         std::cout << "Span: " << span->_path << " is uninitialized" << std::endl;
       } else {
-        std::cout << "Span: " << span->_path << "  #Volumes: " << span->_header->num_volumes <<"  #in use: "<< span->_header->num_used
-                  << "  #free: " << span->_header->num_free << "  #stripes: " << span->_header->num_diskvol_blks << "  Len(bytes): "
-                  << span->_header->num_blocks.value() << std::endl;
+        std::cout << "Span: " << span->_path << "  #Volumes: " << span->_header->num_volumes
+                  << "  #in use: " << span->_header->num_used << "  #free: " << span->_header->num_free
+                  << "  #stripes: " << span->_header->num_diskvol_blks << "  Len(bytes): " << span->_header->num_blocks.value()
+                  << std::endl;
 
         for (auto stripe : span->_stripes) {
           std::cout << "    : "
@@ -1889,7 +1890,7 @@ Clear_Span(std::string devicePath)
   if ((zret = cache.loadSpan(SpanFile))) {
     cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
     for (auto sp : cache._spans) {
-      if (devicePath.size()>0 && 0 == strncmp(sp->_path.path(), devicePath.data(), devicePath.size())) {
+      if (devicePath.size() > 0 && 0 == strncmp(sp->_path.path(), devicePath.data(), devicePath.size())) {
         printf("clearing %s\n", devicePath.data());
         sp->clearPermanently();
       }
@@ -1901,9 +1902,9 @@ Clear_Span(std::string devicePath)
 Errata
 Check_Freelist(std::string devicePath)
 {
-    Errata zret;
-    printf("cache or cash %s\n",devicePath.data());
-    return zret;
+  Errata zret;
+  printf("cache or cash %s\n", devicePath.data());
+  return zret;
 }
 
 int
@@ -1945,8 +1946,9 @@ main(int argc, char *argv[])
                 []() { return List_Stripes(Cache::SpanDumpDepth::STRIPE); });
   Commands.add(std::string("clear"), std::string("Clear spans"), &Clear_Spans);
   Commands.add(std::string("dir_check"), std::string("cache check"))
-    .subCommand(std::string("full"), std::string("Full report of the cache storage"),  &dir_check)
-    .subCommand(std::string("freelist"),std::string("check the freelist for loop"), [&](int, char *argv[]) {return Check_Freelist(inputFile); });
+    .subCommand(std::string("full"), std::string("Full report of the cache storage"), &dir_check)
+    .subCommand(std::string("freelist"), std::string("check the freelist for loop"),
+                [&](int, char *argv[]) { return Check_Freelist(inputFile); });
   Commands.add(std::string("volumes"), std::string("Volumes"), &Simulate_Span_Allocation);
   Commands.add(std::string("alloc"), std::string("Storage allocation"))
     .subCommand(std::string("free"), std::string("Allocate storage on free (empty) spans"), &Cmd_Allocate_Empty_Spans);

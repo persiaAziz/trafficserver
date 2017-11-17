@@ -911,7 +911,8 @@ ostream &operator<<(ostream &os, const ts::TextView &b);
 }
 
 #if 1
-namespace ts {
+namespace ts
+{
 // Preserved for now, I may want this back later.
 /** A read only view of contiguous piece of memory.
 
@@ -1375,6 +1376,6 @@ memcmp(MemView const &lhs, MemView const &rhs)
 
 namespace std
 {
-extern ostream & operator<<(ostream &os, const ts::MemView &b);
+extern ostream &operator<<(ostream &os, const ts::MemView &b);
 }
 #endif
