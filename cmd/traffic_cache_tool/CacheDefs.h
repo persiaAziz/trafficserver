@@ -27,9 +27,10 @@
 #include <ts/Scalar.h>
 #include <netinet/in.h>
 #include <ts/Regex.h>
-#include <ts/MemView.h>
+#include <ts/TextView.h>
 #include "tsconfig/Errata.h"
 #include <iostream>
+
 namespace tag
 {
 struct bytes {
@@ -165,7 +166,7 @@ class URLparser
 {
 public:
   bool verifyURL(std::string &url1);
-  Errata parseURL(StringView URI);
+  Errata parseURL(TextView URI);
   int getPort(std::string &fullURL, int &port_ptr, int &port_len);
 
 private:
@@ -185,20 +186,20 @@ public:
   std::string fragments;
   std::string user;
   std::string password;
-  CacheURL(int port_, ts::StringView b_hostname, ts::StringView b_path, ts::StringView b_params, ts::StringView b_query,
-           ts::StringView b_fragments)
+  CacheURL(int port_, ts::TextView b_hostname, ts::TextView b_path, ts::TextView b_params, ts::TextView b_query,
+           ts::TextView b_fragments)
   {
-    hostname.assign(b_hostname.begin(), b_hostname.size());
+    hostname.assign(b_hostname.data(), b_hostname.size());
     port = port_;
-    path.assign(b_path.begin(), b_path.size());
-    params.assign(b_params.begin(), b_params.size());
-    query.assign(b_query.begin(), b_query.size());
-    fragments.assign(b_fragments.begin(), b_fragments.size());
+    path.assign(b_path.data(), b_path.size());
+    params.assign(b_params.data(), b_params.size());
+    query.assign(b_query.data(), b_query.size());
+    fragments.assign(b_fragments.data(), b_fragments.size());
   }
 
-  CacheURL(ts::StringView blob, int port_)
+  CacheURL(ts::TextView blob, int port_)
   {
-    url.assign(blob.begin(), blob.size());
+    url.assign(blob.data(), blob.size());
     port = port_;
   }
 

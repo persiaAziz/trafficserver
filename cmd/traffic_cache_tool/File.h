@@ -26,7 +26,7 @@
 
 #include <ts/ink_memory.h>
 #include <sys/stat.h>
-#include <ts/MemView.h>
+#include <ts/TextView.h>
 
 namespace ts
 {
@@ -40,7 +40,7 @@ public:
   /// Construct from a null terminated string.
   explicit FilePath(char const *path);
   /// Construct from a string view.
-  explicit FilePath(StringView const &path);
+  explicit FilePath(TextView const &path);
   /// Copy constructor - copies the path.
   FilePath(self const &that);
   /// Move constructor.
@@ -82,7 +82,7 @@ protected:
   /// @return A valid stat buffer or @c nullptr if the system call failed.
   template <typename T> T stat(T (*f)(struct stat const *)) const;
 
-  ats_scoped_str _path; ///< File path.
+  std::string _path; ///< File path.
 
   enum class STAT_P : int8_t { INVALID = -1, UNDEF = 0, VALID = 1 };
   mutable STAT_P _stat_p = STAT_P::UNDEF; ///< Whether _stat is valid.
@@ -93,7 +93,7 @@ protected:
 
     @note This is used primarily for configuration files where the entire file is read every time
     and it's rarely (if ever) useful to read it incrementally. The general scheme is the entire file
-    is read and then @c StringView elements are used to reference the bulk content.
+    is read and then @c TextView elements are used to reference the bulk content.
 
     @internal The design goal of this class is to supplant the free functions later in this header.
 
@@ -110,10 +110,10 @@ public:
   /// Read the contents of the file in a local buffer.
   /// @return @c errno
   int load();
-  StringView content() const;
+  TextView content() const;
 
 private:
-  ats_scoped_str _content; ///< The file contents.
+  std::string _content; ///< The file contents.
   size_t _len;             ///< Length of file content.
 };
 
@@ -122,40 +122,35 @@ private:
 inline FilePath::FilePath()
 {
 }
-inline FilePath::FilePath(char const *path) : _path(ats_strdup(path))
+inline FilePath::FilePath(char const *path) : _path(path)
 {
 }
-inline FilePath::FilePath(StringView const &path)
-{
-  _path = static_cast<char *>(ats_malloc(path.size() + 1));
-  memcpy(_path, path.ptr(), path.size());
-  _path[path.size()] = 0;
-}
-inline FilePath::FilePath(self const &that) : _path(ats_strdup(static_cast<char const *>(that)))
+ inline FilePath::FilePath(TextView const &path) : _path(path.data(), path.size()) {}
+ inline FilePath::FilePath(self const &that) : _path(that._path)
 {
 }
-inline FilePath::FilePath(self &&that) : _path(static_cast<ats_scoped_str &&>(that._path))
+ inline FilePath::FilePath(self &&that) : _path(std::move(that._path))
 {
 }
 inline FilePath::operator const char *() const
 {
-  return _path;
+  return _path.c_str();
 }
 inline char const *
 FilePath::path() const
 {
-  return _path;
+  return _path.c_str();
 }
 
 inline bool
 FilePath::has_path() const
 {
-  return _path && 0 != _path[0];
+  return !_path.empty();
 }
 inline bool
 FilePath::is_absolute() const
 {
-  return _path && '/' == _path[0];
+  return !_path.empty() && '/' == _path[0];
 }
 inline bool
 FilePath::is_relative() const
@@ -168,7 +163,7 @@ T
 FilePath::stat(T (*f)(struct stat const *)) const
 {
   if (STAT_P::UNDEF == _stat_p)
-    _stat_p = ::stat(_path, &_stat) >= 0 ? STAT_P::VALID : STAT_P::INVALID;
+    _stat_p = ::stat(_path.c_str(), &_stat) >= 0 ? STAT_P::VALID : STAT_P::INVALID;
   return _stat_p == STAT_P::VALID ? f(&_stat) : T();
 }
 

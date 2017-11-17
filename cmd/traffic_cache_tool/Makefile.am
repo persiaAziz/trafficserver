@@ -23,7 +23,7 @@ noinst_PROGRAMS = traffic_cache_tool
 
 traffic_cache_tool_SOURCES = CacheDefs.h CacheDefs.cc CacheTool.cc File.h File.cc Command.h Command.cc
 traffic_cache_tool_LDADD = \
-	$(top_builddir)/lib/ts/.libs/MemView.o \
+	$(top_builddir)/lib/ts/.libs/TextView.o \
 	$(top_builddir)/lib/ts/.libs/ink_memory.o \
 	$(top_builddir)/lib/ts/.libs/ink_file.o \
 	$(top_builddir)/lib/ts/.libs/ink_error.o \

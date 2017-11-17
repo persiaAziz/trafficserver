@@ -910,7 +910,8 @@ ostream &operator<<(ostream &os, const ts::TextView &b);
 ostream &operator<<(ostream &os, const ts::TextView &b);
 }
 
-#if 0
+#if 1
+namespace ts {
 // Preserved for now, I may want this back later.
 /** A read only view of contiguous piece of memory.
 
@@ -965,8 +966,8 @@ public:
   */
   constexpr MemView(std::nullptr_t);
 
-  /// Convert from StringView.
-  constexpr MemView(StringView const &that);
+  /// Convert from TextView.
+  constexpr MemView(TextView const &that);
 
   /** Equality.
 
@@ -1140,7 +1141,7 @@ inline MemView::MemView(void const *start, void const *end)
 inline constexpr MemView::MemView(std::nullptr_t) : _ptr(nullptr), _size(0)
 {
 }
-inline constexpr MemView::MemView(StringView const &that) : _ptr(that.ptr()), _size(that.size())
+inline constexpr MemView::MemView(TextView const &that) : _ptr(that.data()), _size(that.size())
 {
 }
 
@@ -1370,18 +1371,10 @@ memcmp(MemView const &lhs, MemView const &rhs)
 
   return zret;
 }
+} // namespace ts
 
 namespace std
 {
-ostream &
-operator<<(ostream &os, const ts::MemView &b)
-{
-  if (os.good()) {
-    ostringstream out;
-    out << b.size() << '@' << hex << b.ptr();
-    os << out.str();
-  }
-  return os;
-}
+extern ostream & operator<<(ostream &os, const ts::MemView &b);
 }
 #endif

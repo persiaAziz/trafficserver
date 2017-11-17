@@ -72,14 +72,14 @@ operator<<(std::ostream &s, CacheDataBlocks const &n)
 }
 
 Errata
-URLparser::parseURL(StringView URI)
+URLparser::parseURL(TextView URI)
 {
   Errata zret;
-  static const StringView HTTP("http");
-  static const StringView HTTPS("https");
-  StringView scheme = URI.splitPrefix(':');
+  static const TextView HTTP("http");
+  static const TextView HTTPS("https");
+  TextView scheme = URI.take_prefix_at(':');
   if ((strcasecmp(scheme, HTTP) == 0) || (strcasecmp(scheme, HTTPS) == 0)) {
-    StringView hostname = URI.splitPrefix(':');
+    TextView hostname = URI.take_prefix_at(':');
     if (!hostname) // i.e. port not present
     {
     }
@@ -104,20 +104,20 @@ URLparser::getPort(std::string &fullURL, int &port_ptr, int &port_len)
   }
   if (u_pos != -1) {
     fullURL.insert(u_pos, ":@");
-    static const StringView HTTP("http");
-    static const StringView HTTPS("https");
-    StringView url(fullURL.data(), (int)fullURL.size());
+    static const TextView HTTP("http");
+    static const TextView HTTPS("https");
+    TextView url(fullURL.data(), (int)fullURL.size());
 
     url += 9;
 
-    StringView hostPort = url.splitPrefix(':');
+    TextView hostPort = url.take_prefix_at(':');
     if (hostPort) // i.e. port is present
     {
-      StringView port = url.splitPrefix('/');
+      TextView port = url.take_prefix_at('/');
       if (!port) // i.e. backslash is not present, then the rest of the url must be just port
         port = url;
-      if (matcher.portmatch(port.begin(), port.size())) {
-        StringView text;
+      if (matcher.portmatch(port.data(), port.size())) {
+        TextView text;
         n_port = svtoi(port, &text);
         if (text == port) {
           port_ptr = fullURL.find(':', 9);

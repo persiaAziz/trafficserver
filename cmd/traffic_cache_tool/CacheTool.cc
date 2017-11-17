@@ -47,7 +47,6 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
-
 using ts::Bytes;
 using ts::Megabytes;
 using ts::CacheStoreBlocks;
@@ -56,8 +55,8 @@ using ts::StripeMeta;
 using ts::CacheStripeDescriptor;
 using ts::Errata;
 using ts::FilePath;
-using ts::MemView;
 using ts::CacheDirEntry;
+using ts::MemView;
 
 constexpr int ESTIMATED_OBJECT_SIZE      = 8000;
 constexpr int VOL_HASH_TABLE_SIZE        = 32707;
@@ -309,8 +308,8 @@ Stripe::updateLiveData(enum Copy c)
 {
   CacheStoreBlocks delta{_meta_pos[c][FOOT] - _meta_pos[c][HEAD]};
   CacheStoreBlocks header_len(0);
-  int64_t n_buckets;
-  int64_t n_segments;
+//  int64_t n_buckets;
+//  int64_t n_segments;
 
   _content = _start;
   this->vol_init_data();
@@ -542,8 +541,8 @@ Stripe::dir_check()
   // create raw_dir pointing at the first ever dir in the stripe;
   char *raw_dir          = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
   dir                    = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
-  uint64_t total_buckets = _segments * _buckets;
-  uint64_t total_entries = total_buckets * DIR_DEPTH;
+//  uint64_t total_buckets = _segments * _buckets;
+//  uint64_t total_entries = total_buckets * DIR_DEPTH;
   int frag_demographics[1 << DIR_SIZE_WIDTH][DIR_BLOCK_SIZES];
   int j;
   int stale = 0, in_use = 0, empty = 0;
@@ -1212,30 +1211,30 @@ Cache::loadSpanDirect(FilePath const &path, int vol_idx, Bytes size)
 Errata
 Cache::loadSpanConfig(FilePath const &path)
 {
-  static const ts::StringView TAG_ID("id");
-  static const ts::StringView TAG_VOL("volume");
+  static const ts::TextView TAG_ID("id");
+  static const ts::TextView TAG_VOL("volume");
 
   Errata zret;
 
   ts::BulkFile cfile(path);
   if (0 == cfile.load()) {
-    ts::StringView content = cfile.content();
+    ts::TextView content = cfile.content();
     while (content) {
-      ts::StringView line = content.splitPrefix('\n');
-      line.ltrim(&isspace);
+      ts::TextView line = content.take_prefix_at('\n');
+      line.ltrim_if(&isspace);
       if (!line || '#' == *line)
         continue;
-      ts::StringView path = line.extractPrefix(&isspace);
+      ts::TextView path = line.take_prefix_if(&isspace);
       if (path) {
         // After this the line is [size] [id=string] [volume=#]
         while (line) {
-          ts::StringView value(line.extractPrefix(&isspace));
+          ts::TextView value(line.take_prefix_if(&isspace));
           if (value) {
-            ts::StringView tag(value.splitPrefix('='));
+            ts::TextView tag(value.take_prefix_at('='));
             if (!tag) { // must be the size
             } else if (0 == strcasecmp(tag, TAG_ID)) {
             } else if (0 == strcasecmp(tag, TAG_VOL)) {
-              ts::StringView text;
+              ts::TextView text;
               auto n = ts::svtoi(value, &text);
               if (text == value && 0 < n && n < 256) {
               } else {
@@ -1256,22 +1255,22 @@ Cache::loadSpanConfig(FilePath const &path)
 Errata
 Cache::loadURLs(FilePath const &path)
 {
-  static const ts::StringView TAG_VOL("url");
+  static const ts::TextView TAG_VOL("url");
   ts::URLparser parser;
   Errata zret;
 
   ts::BulkFile cfile(path);
   if (0 == cfile.load()) {
-    ts::StringView content = cfile.content();
+    ts::TextView content = cfile.content();
 
     while (content) {
-      ts::StringView blob = content.splitPrefix('\n');
+      ts::TextView blob = content.take_prefix_at('\n');
 
-      ts::StringView tag(blob.splitPrefix('='));
+      ts::TextView tag(blob.take_prefix_at('='));
       if (!tag) {
       } else if (0 == strcasecmp(tag, TAG_VOL)) {
         std::string url;
-        url.assign(blob.begin(), blob.size());
+        url.assign(blob.data(), blob.size());
         int port_ptr = -1, port_len = -1;
         int port = parser.getPort(url, port_ptr, port_len);
         if (port_ptr >= 0 && port_len > 0)
@@ -1398,7 +1397,7 @@ Span::loadDevice()
 #endif
     ;
 
-  ats_scoped_fd fd(_path.open(flags));
+  ats_scoped_fd fd{_path.open(flags)};
 
   if (fd) {
     if (ink_file_get_geometry(fd, _geometry)) {
@@ -1686,8 +1685,8 @@ Cache::key_to_stripe(INK_MD5 *key, const char *hostname, int host_len)
 Errata
 VolumeConfig::load(FilePath const &path)
 {
-  static const ts::StringView TAG_SIZE("size");
-  static const ts::StringView TAG_VOL("volume");
+  static const ts::TextView TAG_SIZE("size");
+  static const ts::TextView TAG_VOL("volume");
 
   Errata zret;
 
@@ -1695,29 +1694,29 @@ VolumeConfig::load(FilePath const &path)
 
   ts::BulkFile cfile(path);
   if (0 == cfile.load()) {
-    ts::StringView content = cfile.content();
+    ts::TextView content = cfile.content();
     while (content) {
       Data v;
 
       ++ln;
-      ts::StringView line = content.splitPrefix('\n');
-      line.ltrim(&isspace);
+      ts::TextView line = content.take_prefix_at('\n');
+      line.ltrim_if(&isspace);
       if (!line || '#' == *line)
         continue;
 
       while (line) {
-        ts::StringView value(line.extractPrefix(&isspace));
-        ts::StringView tag(value.splitPrefix('='));
+        ts::TextView value(line.take_prefix_if(&isspace));
+        ts::TextView tag(value.take_prefix_at('='));
         if (!tag) {
           zret.push(0, 1, "Line ", ln, " is invalid");
         } else if (0 == strcasecmp(tag, TAG_SIZE)) {
           if (v.hasSize()) {
             zret.push(0, 5, "Line ", ln, " has field ", TAG_SIZE, " more than once");
           } else {
-            ts::StringView text;
+            ts::TextView text;
             auto n = ts::svtoi(value, &text);
             if (text) {
-              ts::StringView percent(text.end(), value.end()); // clip parsed number.
+              ts::TextView percent(text.data_end(), value.data_end()); // clip parsed number.
               if (!percent) {
                 v._size = CacheStripeBlocks(round_up(Megabytes(n)));
                 if (v._size.count() != n) {
@@ -1736,7 +1735,7 @@ VolumeConfig::load(FilePath const &path)
           if (v.hasIndex()) {
             zret.push(0, 6, "Line ", ln, " has field ", TAG_VOL, " more than once");
           } else {
-            ts::StringView text;
+            ts::TextView text;
             auto n = ts::svtoi(value, &text);
             if (text == value) {
               v._idx = n;
