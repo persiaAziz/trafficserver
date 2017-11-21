@@ -43,8 +43,6 @@
 #include <vector>
 #include <unordered_set>
 #include <time.h>
-
-#define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
 using ts::Bytes;
