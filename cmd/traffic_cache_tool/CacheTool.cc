@@ -1394,10 +1394,10 @@ Cache::loadSpanDirect(FilePath const &path, int vol_idx, Bytes size)
           stripe->_type    = raw.type;
           _volumes[stripe->_vol_idx]._stripes.push_back(stripe);
           _volumes[stripe->_vol_idx]._size += stripe->_len;
+          stripe->vol_init_data();
         } else {
           span->_free_space += stripe->_len;
         }
-        stripe->vol_init_data();
         span->_stripes.push_back(stripe);
         globalVec_stripe.push_back(stripe);
       }
