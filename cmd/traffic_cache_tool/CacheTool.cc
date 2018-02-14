@@ -923,7 +923,7 @@ Stripe::loadMeta()
                            io_align, " is larger than the buffer alignment ", SBSIZE);
 
   _directory._start = pos;
-
+  vol_init_data();
   // Header A must be at the start of the stripe block.
   // Todo: really need to check pread() for failure.
   ssize_t headerbyteCount = pread(fd, stripe_buff2, SBSIZE, pos);
@@ -964,18 +964,19 @@ Stripe::loadMeta()
   } else {
     zret.push(0, 1, "Header A not found");
   }
-
+  pos = _meta_pos[A][FOOT];
   // Technically if Copy A is valid, Copy B is not needed. But at this point it's cheap to retrieve
   // (as the exact offset is computable).
   if (_meta_pos[A][FOOT] > 0) {
     delta = _meta_pos[A][FOOT] - _meta_pos[A][HEAD];
     // Header B should be immediately after Footer A. If at the end of the last read,
     // do another read.
-    if (data.size() < CacheStoreBlocks::SCALE) {
-      pos += round_up(N);
-      n = Bytes(pread(fd, stripe_buff, CacheStoreBlocks::SCALE, pos));
-      data.setView(stripe_buff, n);
-    }
+    //    if (data.size() < CacheStoreBlocks::SCALE) {
+    //      pos += round_up(N);
+    //      n = Bytes(pread(fd, stripe_buff, CacheStoreBlocks::SCALE, pos));
+    //      data.setView(stripe_buff, n);
+    //    }
+    pos  = this->_start + Bytes(vol_dirlen());
     meta = data.template at_ptr<StripeMeta>(0);
     if (this->validateMeta(meta)) {
       _meta[B][HEAD]     = *meta;
