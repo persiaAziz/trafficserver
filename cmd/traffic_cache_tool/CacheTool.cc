@@ -319,7 +319,6 @@ Stripe::updateLiveData(enum Copy c)
   //  int64_t n_segments;
 
   _content = _start;
-  this->vol_init_data();
   /*
    * COMMENTING THIS SECTION FOR NOW TO USE THE EXACT LOGIN USED IN ATS TO CALCULATE THE NUMBER OF SEGMENTS AND BUCKETS
   // Past the header is the segment free list heads which if sufficiently long (> ~4K) can take
@@ -923,7 +922,6 @@ Stripe::loadMeta()
                            io_align, " is larger than the buffer alignment ", SBSIZE);
 
   _directory._start = pos;
-  vol_init_data();
   // Header A must be at the start of the stripe block.
   // Todo: really need to check pread() for failure.
   ssize_t headerbyteCount = pread(fd, stripe_buff2, SBSIZE, pos);
@@ -1399,6 +1397,7 @@ Cache::loadSpanDirect(FilePath const &path, int vol_idx, Bytes size)
         } else {
           span->_free_space += stripe->_len;
         }
+        stripe->vol_init_data();
         span->_stripes.push_back(stripe);
         globalVec_stripe.push_back(stripe);
       }
