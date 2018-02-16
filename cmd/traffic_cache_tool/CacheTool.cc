@@ -208,7 +208,18 @@ struct Stripe {
   int dir_bucket_length(CacheDirEntry *b, int s);
   int dir_probe(INK_MD5 *key, CacheDirEntry *result, CacheDirEntry **last_collision);
   bool dir_valid(CacheDirEntry *e);
+  bool validate_sync_serial();
 };
+
+bool
+Stripe::validate_sync_serial()
+{
+  // check if A sync_serials match and A is at least as updated as B
+  return (_meta[0][0].sync_serial == _meta[0][1].sync_serial &&
+          (_meta[0][0].sync_serial >= _meta[1][0].sync_serial ||
+           _meta[1][0].sync_serial != _meta[1][1].sync_serial)) || // OR check if B's sync_serials match
+         (_meta[1][0].sync_serial == _meta[1][1].sync_serial);
+}
 
 Stripe::Chunk::~Chunk()
 {
@@ -995,7 +1006,7 @@ Stripe::loadMeta()
   if (_meta_pos[A][FOOT] > 0) {
     if (_meta[A][HEAD].sync_serial == _meta[A][FOOT].sync_serial &&
         (0 == _meta_pos[B][FOOT] || _meta[B][HEAD].sync_serial != _meta[B][FOOT].sync_serial ||
-         _meta[A][HEAD].sync_serial > _meta[B][HEAD].sync_serial)) {
+         _meta[A][HEAD].sync_serial >= _meta[B][HEAD].sync_serial)) {
       this->updateLiveData(A);
     } else if (_meta_pos[B][FOOT] > 0 && _meta[B][HEAD].sync_serial == _meta[B][FOOT].sync_serial) {
       this->updateLiveData(B);
@@ -1536,7 +1547,9 @@ Cache::dumpSpans(SpanDumpDepth depth)
                             << "\n sector_size: " << stripe->_meta[i][j].sector_size << std::endl;
                 }
               }
-
+              if (!stripe->validate_sync_serial()) {
+                std::cout << "WARNING:::::Validity check failed for sync_serials" << std::endl;
+              }
               stripe->_directory.clear();
             } else {
               std::cout << r;
