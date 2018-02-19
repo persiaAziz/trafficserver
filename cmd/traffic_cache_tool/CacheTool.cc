@@ -90,7 +90,8 @@ struct Span {
   Span(FilePath const &path) : _path(path) {}
   Errata load();
   Errata loadDevice();
-
+  Errata Initialize();
+  Errata create_stripe(int number, off_t size_in_blocks, int scheme);
   /// No allocated stripes on this span.
   bool isEmpty() const;
 
@@ -1606,6 +1607,30 @@ Cache::~Cache()
 }
 /* --------------------------------------------------------------------------------------- */
 Errata
+Span::Initialize()
+{
+  Errata zret;
+  std::cout << "available free space" << _free_space << std::endl;
+}
+
+Errata
+Span::create_stripe(int number, off_t size_in_blocks, int scheme)
+{
+  Errata zret;
+  // initialize span header first
+  ts::SpanHeader sph;
+  sph.magic            = ts::SpanHeader::MAGIC;
+  sph.num_volumes      = 1;
+  sph.num_free         = 1;
+  sph.num_used         = 0;
+  sph.num_diskvol_blks = -1;
+  // sph.num_blocks = 0;
+
+  // initialize stripes
+  return zret;
+}
+
+Errata
 Span::load()
 {
   Errata zret;
@@ -2182,6 +2207,23 @@ Check_Freelist(std::string devicePath)
 }
 
 Errata
+Init_disk(FilePath const &input_file_path)
+{
+  Errata zret;
+  Cache cache;
+  std::unique_ptr<Span> span(new Span(input_file_path));
+  span->load();
+
+  if (span->_header) {
+    zret.push(0, 1, "Disk already initialized with valid header");
+  } else {
+    zret = span->Initialize();
+  }
+
+  return zret;
+}
+
+Errata
 Get_Response(FilePath const &input_file_path)
 {
   // scheme=http user=u password=p host=172.28.56.109 path=somepath query=somequery port=1234
@@ -2279,6 +2321,8 @@ main(int argc, char *argv[])
     .subCommand(std::string("span"), std::string("device path"), [&](int, char *argv[]) { return Clear_Span(inputFile); });
   Commands.add(std::string("retrieve"), std::string(" retrieve the response of the given list of URLs"),
                [&](int, char *argv[]) { return Get_Response(input_url_file); });
+  Commands.add(std::string("init"), std::string(" Initialize Span if the header is invalid"),
+               [&](int, char *argv[]) { return Init_disk(input_url_file); });
   Commands.setArgIndex(optind);
 
   if (help) {
