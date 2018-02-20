@@ -57,7 +57,11 @@ using ts::CacheDirEntry;
 using ts::MemView;
 using ts::Doc;
 
+constexpr int STORE_BLOCK_SIZE           = 8192;
+constexpr int STORE_BLOCK_SHIFT          = 13;
 constexpr int ESTIMATED_OBJECT_SIZE      = 8000;
+constexpr int DEFAULT_HW_SECTOR_SIZE     = 512;
+constexpr int MIN_VOL_SIZE               = 1024 * 1024 * 128;
 constexpr int VOL_HASH_TABLE_SIZE        = 32707;
 int cache_config_min_average_object_size = ESTIMATED_OBJECT_SIZE;
 CacheStoreBlocks Vol_hash_alloc_size(1024);
@@ -94,6 +98,7 @@ struct Span {
   Errata create_stripe(int number, off_t size_in_blocks, int scheme);
   /// No allocated stripes on this span.
   bool isEmpty() const;
+  int header_len = 0;
 
   /// Replace all existing stripes with a single unallocated stripe covering the span.
   Errata clear();
@@ -113,6 +118,7 @@ struct Span {
   CacheStoreBlocks _len;         ///< Total length of span.
   CacheStoreBlocks _free_space;  ///< Total size of free stripes.
   ink_device_geometry _geometry; ///< Geometry of span.
+  uint64_t num_usable_blocks;    // number of usable blocks for stripes i.e., after subtracting the skip and the disk header.
   /// Local copy of serialized header data stored on in the span.
   std::unique_ptr<ts::SpanHeader> _header;
   /// Live information about stripes.
@@ -1231,7 +1237,7 @@ public:
   Errata load(FilePath const &spanFile, FilePath const &volumeFile);
   Errata fillEmptySpans();
   Errata fillAllSpans();
-
+  Errata allocateSpan(Span *span);
   void dumpVolumes();
 
 protected:
@@ -1288,6 +1294,14 @@ VolumeAllocator::fillEmptySpans()
     if (span->isEmpty())
       this->allocateFor(*span);
   }
+  return zret;
+}
+
+Errata
+VolumeAllocator::allocateSpan(Span *span)
+{
+  Errata zret;
+  this->allocateFor(*span);
   return zret;
 }
 
@@ -1610,7 +1624,36 @@ Errata
 Span::Initialize()
 {
   Errata zret;
-  std::cout << "available free space" << _free_space << std::endl;
+  VolumeAllocator va;
+
+  for (auto *strp : _stripes) {
+    std::cout << "strpe start=============" << strp->_start << std::endl;
+  }
+
+  //  OPEN_RW_FLAG = O_RDWR;
+  zret = va.load(SpanFile, VolumeFile);
+  va.allocateSpan(this);
+
+  auto skip = CacheStoreBlocks::SCALE;
+  // successive approximation to calculate start
+  auto start = skip;
+  uint64_t l;
+  for (int i = 0; i < 3; i++) {
+    l = _len - (start - skip);
+    if (l >= MIN_VOL_SIZE) {
+      header_len = sizeof(ts::SpanHeader) + (l / MIN_VOL_SIZE - 1) * sizeof(CacheStripeDescriptor);
+    } else {
+      header_len = sizeof(ts::SpanHeader);
+    }
+    start = skip + header_len;
+  }
+  auto blocks = this->_geometry.totalsz / STORE_BLOCK_SIZE;
+  // num_usable_blocks = ((_len * STORE_BLOCK_SIZE) - (start - skip)) >> STORE_BLOCK_SHIFT;
+  auto sector_size = this->_geometry.blocksz;
+  header_len       = ROUND_TO_STORE_BLOCK(header_len);
+  std::cout << "start " << start << "len " << _len << " header length " << header_len << std::endl;
+  num_usable_blocks = (_len - (start - skip)) >> STORE_BLOCK_SHIFT;
+  return zret;
 }
 
 Errata
@@ -1820,7 +1863,16 @@ Span::clearPermanently()
         std::cout << " - " << n << " of " << sizeof(zero) << " bytes written";
       std::cout << " - " << text;
     }
+
     std::cout << std::endl;
+    // clear the stripes as well
+    for (auto *strp : _stripes) {
+      std::cout << "Clearing stripe @" << strp->_start << " of length: " << strp->_len << std::endl;
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1]);
+    }
   } else {
     std::cout << "Clearing " << _path << " not performed, write not enabled" << std::endl;
   }
