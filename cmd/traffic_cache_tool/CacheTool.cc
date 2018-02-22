@@ -216,6 +216,8 @@ struct Stripe {
   int dir_probe(INK_MD5 *key, CacheDirEntry *result, CacheDirEntry **last_collision);
   bool dir_valid(CacheDirEntry *e);
   bool validate_sync_serial();
+  Errata updateHeaderFooter();
+  Errata InitializeMeta();
 };
 
 bool
@@ -265,6 +267,36 @@ Stripe::isFree() const
   return 0 == _vol_idx;
 }
 
+// TODO: Implement the whole logic
+Errata
+Stripe::InitializeMeta()
+{
+  Errata zret;
+  size_t dir_len = this->vol_dirlen();
+  // memset(this->raw_dir, 0, dir_len);
+  for (int i = 0; i < 2; i++) {
+    for (int j = 0; j < 2; j++) {
+      _meta[i][j].magic             = StripeMeta::MAGIC;
+      _meta[i][j].version.ink_major = ts::CACHE_DB_MAJOR_VERSION;
+      _meta[i][j].version.ink_minor = ts::CACHE_DB_MINOR_VERSION;
+      _meta[i][j].agg_pos = _meta[i][j].write_pos = this->_start;
+    }
+  }
+  // vol_init_dir(d);
+  //    this->magic             = VOL_MAGIC;
+  //    this->version.ink_major = CACHE_DB_MAJOR_VERSION;
+  //    this->version.ink_minor = CACHE_DB_MINOR_VERSION;
+  //    this->agg_pos = this->write_pos = d->start;
+  //    d->header->last_write_pos                               = d->header->write_pos;
+  //    d->header->phase                                        = 0;
+  //    d->header->cycle                                        = 0;
+  //    d->header->create_time                                  = time(nullptr);
+  //    d->header->dirty                                        = 0;
+  //    d->sector_size = d->header->sector_size = d->disk->hw_sector_size;
+  //    *d->footer                              = *d->header;
+  return zret;
+}
+
 // Need to be bit more robust at some point.
 bool
 Stripe::validateMeta(StripeMeta const *meta)
@@ -295,6 +327,26 @@ Stripe::probeMeta(MemView &mem, StripeMeta const *base_meta)
 #define INK_ALIGN(size, boundary) (((size) + ((boundary)-1)) & ~((boundary)-1))
 
 #define ROUND_TO_STORE_BLOCK(_x) INK_ALIGN((_x), 8192)
+
+Errata
+Stripe::updateHeaderFooter()
+{
+  Errata zret;
+  // pwrite(this->_span->_fd, zero, sizeof(zero), _meta_pos[0][0]);
+  this->vol_init_data();
+  Bytes footer_offset = Bytes(vol_dirlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
+  _meta_pos[0][0]     = round_down(_start);
+  _meta_pos[0][1]     = round_down(_start + footer_offset);
+  _meta_pos[1][0]     = round_down(this->_start + Bytes(vol_dirlen()));
+  _meta_pos[1][1]     = round_down(this->_start + Bytes(vol_dirlen()) + footer_offset);
+  std::cout << "updating header " << _meta_pos[0][0] << std::endl;
+  std::cout << "updating header " << _meta_pos[0][1] << std::endl;
+  std::cout << "updating header " << _meta_pos[1][0] << std::endl;
+  std::cout << "updating header " << _meta_pos[1][1] << std::endl;
+  InitializeMeta();
+  // n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
+  return zret;
+}
 
 TS_INLINE int
 Stripe::vol_headerlen()
@@ -1237,7 +1289,7 @@ public:
   Errata load(FilePath const &spanFile, FilePath const &volumeFile);
   Errata fillEmptySpans();
   Errata fillAllSpans();
-  Errata allocateSpan(Span *span);
+  Errata allocateSpan(FilePath const &spanFile);
   void dumpVolumes();
 
 protected:
@@ -1298,10 +1350,26 @@ VolumeAllocator::fillEmptySpans()
 }
 
 Errata
-VolumeAllocator::allocateSpan(Span *span)
+VolumeAllocator::allocateSpan(FilePath const &input_file_path)
 {
   Errata zret;
-  this->allocateFor(*span);
+  for (auto span : _cache._spans) {
+    if (0 == strcmp(span->_path.path(), input_file_path.path())) {
+      std::cout << "===============================" << std::endl;
+      if (span->_header) {
+        zret.push(0, 1, "Disk already initialized with valid header");
+      } else {
+        this->allocateFor(*span);
+        span->updateHeader();
+        for (auto &strp : span->_stripes) {
+          strp->updateHeaderFooter();
+        }
+      }
+    }
+  }
+  for (auto &_v : _av) {
+    std::cout << _v._size << std::endl;
+  }
   return zret;
 }
 
@@ -1624,16 +1692,10 @@ Errata
 Span::Initialize()
 {
   Errata zret;
-  VolumeAllocator va;
 
   for (auto *strp : _stripes) {
     std::cout << "strpe start=============" << strp->_start << std::endl;
   }
-
-  //  OPEN_RW_FLAG = O_RDWR;
-  zret = va.load(SpanFile, VolumeFile);
-  va.allocateSpan(this);
-
   auto skip = CacheStoreBlocks::SCALE;
   // successive approximation to calculate start
   auto start = skip;
@@ -1819,6 +1881,7 @@ Span::updateHeader()
 
   sd = hdr->stripes;
   for (auto stripe : _stripes) {
+    std::cout << stripe->hashText << std::endl;
     sd->offset               = stripe->_start;
     sd->len                  = stripe->_len;
     sd->vol_idx              = stripe->_vol_idx;
@@ -1867,6 +1930,7 @@ Span::clearPermanently()
     std::cout << std::endl;
     // clear the stripes as well
     for (auto *strp : _stripes) {
+      strp->loadMeta();
       std::cout << "Clearing stripe @" << strp->_start << " of length: " << strp->_len << std::endl;
       n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
       n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1]);
@@ -2263,14 +2327,11 @@ Init_disk(FilePath const &input_file_path)
 {
   Errata zret;
   Cache cache;
-  std::unique_ptr<Span> span(new Span(input_file_path));
-  span->load();
+  VolumeAllocator va;
 
-  if (span->_header) {
-    zret.push(0, 1, "Disk already initialized with valid header");
-  } else {
-    zret = span->Initialize();
-  }
+  //  OPEN_RW_FLAG = O_RDWR;
+  zret = va.load(SpanFile, VolumeFile);
+  va.allocateSpan(input_file_path);
 
   return zret;
 }
