@@ -279,21 +279,16 @@ Stripe::InitializeMeta()
       _meta[i][j].magic             = StripeMeta::MAGIC;
       _meta[i][j].version.ink_major = ts::CACHE_DB_MAJOR_VERSION;
       _meta[i][j].version.ink_minor = ts::CACHE_DB_MINOR_VERSION;
-      _meta[i][j].agg_pos = _meta[i][j].write_pos = this->_start;
+      _meta[i][j].agg_pos = _meta[i][j].last_write_pos = _meta[i][j].write_pos = this->_start;
+      _meta[i][j].phase = _meta[i][j].cycle = _meta[i][j].dirty = 0;
+      _meta[i][j].create_time                                   = time(nullptr);
+      _meta[i][j].sector_size                                   = DEFAULT_HW_SECTOR_SIZE;
     }
   }
+  for (int i = 0; i < _segments; i++) {
+    dir_init_segment(i);
+  }
   // vol_init_dir(d);
-  //    this->magic             = VOL_MAGIC;
-  //    this->version.ink_major = CACHE_DB_MAJOR_VERSION;
-  //    this->version.ink_minor = CACHE_DB_MINOR_VERSION;
-  //    this->agg_pos = this->write_pos = d->start;
-  //    d->header->last_write_pos                               = d->header->write_pos;
-  //    d->header->phase                                        = 0;
-  //    d->header->cycle                                        = 0;
-  //    d->header->create_time                                  = time(nullptr);
-  //    d->header->dirty                                        = 0;
-  //    d->sector_size = d->header->sector_size = d->disk->hw_sector_size;
-  //    *d->footer                              = *d->header;
   return zret;
 }
 
@@ -344,6 +339,13 @@ Stripe::updateHeaderFooter()
   std::cout << "updating header " << _meta_pos[1][0] << std::endl;
   std::cout << "updating header " << _meta_pos[1][1] << std::endl;
   InitializeMeta();
+
+  static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
+  for (int i = 0; i < 2; i++) {
+    for (int j = 0; j < 2; j++) {
+      pwrite(_span->_fd, &_meta[i][j], sizeof(StripeMeta), this->_meta_pos[i][j]);
+    }
+  }
   // n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
   return zret;
 }
