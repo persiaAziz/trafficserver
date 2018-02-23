@@ -198,8 +198,10 @@ struct Stripe {
   CacheStoreBlocks _meta_pos[2][2];
   /// Directory.
   Chunk _directory;
-  CacheDirEntry const *dir = nullptr;
-  uint16_t *freelist       = nullptr;
+  CacheDirEntry const *dir = nullptr; // the big buffer that will hold the whole directory of stripe header.
+  uint16_t *freelist       = nullptr; // using this freelist instead of the one in StripeMeta.
+                                      // This is because the freelist is not being copied to _metap[2][2] correctly.
+  // need to do something about it .. hmmm :-?
   int dir_freelist_length(int s);
   TS_INLINE CacheDirEntry *dir_segment(int s);
   TS_INLINE CacheDirEntry *vol_dir_segment(int s);
@@ -285,6 +287,15 @@ Stripe::InitializeMeta()
       _meta[i][j].sector_size                                   = DEFAULT_HW_SECTOR_SIZE;
     }
   }
+  if (!freelist) // freelist is not allocated yet
+  {
+    freelist = (uint16_t *)malloc(_segments * sizeof(uint16_t)); // segments has already been calculated
+  }
+  if(!dir) // for new spans, this will likely be nullptr as we don't need to read the stripe meta from disk
+  {
+      char *raw_dir = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
+        dir           = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
+  }
   for (int i = 0; i < _segments; i++) {
     dir_init_segment(i);
   }
@@ -327,7 +338,6 @@ Errata
 Stripe::updateHeaderFooter()
 {
   Errata zret;
-  // pwrite(this->_span->_fd, zero, sizeof(zero), _meta_pos[0][0]);
   this->vol_init_data();
   Bytes footer_offset = Bytes(vol_dirlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
   _meta_pos[0][0]     = round_down(_start);
@@ -340,13 +350,26 @@ Stripe::updateHeaderFooter()
   std::cout << "updating header " << _meta_pos[1][1] << std::endl;
   InitializeMeta();
 
+
+  if(!OPEN_RW_FLAG)
+  {
+      zret.push(0,1,"Writing Not Enabled.. Please use --write to enable writing to disk");
+      return zret;
+  }
   static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
   for (int i = 0; i < 2; i++) {
     for (int j = 0; j < 2; j++) {
       pwrite(_span->_fd, &_meta[i][j], sizeof(StripeMeta), this->_meta_pos[i][j]);
     }
   }
-  // n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
+  /// TODO: check the offsets!!!!!!!!!!!!!
+  //write dir entries in the disk
+  int offset_dir = _meta_pos[0][0] + vol_headerlen();
+  pwrite(this->_span->_fd, (char*)dir, vol_dirlen()-vol_headerlen()-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
+
+  offset_dir = _meta_pos[1][0] + vol_headerlen();
+  pwrite(this->_span->_fd, (char*)dir, vol_dirlen()-vol_headerlen()-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
+
   return zret;
 }
 
@@ -670,13 +693,13 @@ void
 Stripe::dir_free_entry(CacheDirEntry *e, int s)
 {
   CacheDirEntry *seg = this->dir_segment(s);
-  unsigned int fo    = this->_meta[0][0].freelist[s];
+  unsigned int fo    = this->freelist[s];
   unsigned int eo    = dir_to_offset(e, seg);
   dir_set_next(e, fo);
   if (fo) {
     dir_set_prev(dir_from_offset(fo, seg), eo);
   }
-  this->_meta[0][0].freelist[s] = eo;
+  this->freelist[s] = eo;
 }
 
 // adds all the directory entries
@@ -684,8 +707,8 @@ Stripe::dir_free_entry(CacheDirEntry *e, int s)
 void
 Stripe::dir_init_segment(int s)
 {
-  this->_meta[0][0].freelist[s] = 0;
-  CacheDirEntry *seg            = this->dir_segment(s);
+  this->freelist[s]  = 0;
+  CacheDirEntry *seg = this->dir_segment(s);
   int l, b;
   memset(seg, 0, SIZEOF_DIR * DIR_DEPTH * this->_buckets);
   for (l = 1; l < DIR_DEPTH; l++) {
@@ -1934,10 +1957,10 @@ Span::clearPermanently()
     for (auto *strp : _stripes) {
       strp->loadMeta();
       std::cout << "Clearing stripe @" << strp->_start << " of length: " << strp->_len << std::endl;
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1]);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0]);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0].count()*8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1].count()*8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0].count()*8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1].count()*8192);
     }
   } else {
     std::cout << "Clearing " << _path << " not performed, write not enabled" << std::endl;
