@@ -359,15 +359,22 @@ Stripe::updateHeaderFooter()
   static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
   for (int i = 0; i < 2; i++) {
     for (int j = 0; j < 2; j++) {
-      pwrite(_span->_fd, &_meta[i][j], sizeof(StripeMeta), this->_meta_pos[i][j]);
+        char* meta_t = (char*)&_meta[i][j];
+        std::cout<<(&_meta[i][j])->magic<<"::"<<_meta_pos[i][j]<<std::endl;
+        ssize_t n = pwrite(_span->_fd, meta_t, sizeof(StripeMeta), this->_meta_pos[i][j]);
+        if(n<this->_meta_pos[i][j])
+        {
+            zret = Errata::Message(0, errno, "Failed to write stripe header ");
+            return zret;
+        }
     }
   }
   /// TODO: check the offsets!!!!!!!!!!!!!
   //write dir entries in the disk
-  int offset_dir = _meta_pos[0][0] + vol_headerlen();
+  uint64_t offset_dir = _meta_pos[0][0].count()*8192 + vol_headerlen();
   pwrite(this->_span->_fd, (char*)dir, vol_dirlen()-vol_headerlen()-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
 
-  offset_dir = _meta_pos[1][0] + vol_headerlen();
+  offset_dir = _meta_pos[1][0].count()*8192 + vol_headerlen();
   pwrite(this->_span->_fd, (char*)dir, vol_dirlen()-vol_headerlen()-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
 
   return zret;
