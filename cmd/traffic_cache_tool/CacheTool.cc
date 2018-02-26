@@ -291,10 +291,10 @@ Stripe::InitializeMeta()
   {
     freelist = (uint16_t *)malloc(_segments * sizeof(uint16_t)); // segments has already been calculated
   }
-  if(!dir) // for new spans, this will likely be nullptr as we don't need to read the stripe meta from disk
+  if (!dir) // for new spans, this will likely be nullptr as we don't need to read the stripe meta from disk
   {
-      char *raw_dir = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
-        dir           = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
+    char *raw_dir = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
+    dir           = (CacheDirEntry *)(raw_dir + this->vol_headerlen());
   }
   for (int i = 0; i < _segments; i++) {
     dir_init_segment(i);
@@ -350,32 +350,31 @@ Stripe::updateHeaderFooter()
   std::cout << "updating header " << _meta_pos[1][1] << std::endl;
   InitializeMeta();
 
-
-  if(!OPEN_RW_FLAG)
-  {
-      zret.push(0,1,"Writing Not Enabled.. Please use --write to enable writing to disk");
-      return zret;
+  if (!OPEN_RW_FLAG) {
+    zret.push(0, 1, "Writing Not Enabled.. Please use --write to enable writing to disk");
+    return zret;
   }
   static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
   for (int i = 0; i < 2; i++) {
     for (int j = 0; j < 2; j++) {
-        char* meta_t = (char*)&_meta[i][j];
-        std::cout<<(&_meta[i][j])->magic<<"::"<<_meta_pos[i][j]<<std::endl;
-        ssize_t n = pwrite(_span->_fd, meta_t, sizeof(StripeMeta), this->_meta_pos[i][j]);
-        if(n<this->_meta_pos[i][j])
-        {
-            zret = Errata::Message(0, errno, "Failed to write stripe header ");
-            return zret;
-        }
+      char *meta_t = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
+      memcpy(meta_t, &_meta[i][j], sizeof(StripeMeta));
+      std::cout << _meta[i][j].magic << "::" << (&_meta[i][j])->magic << "::" << _meta_pos[i][j] << std::endl;
+      ssize_t n = pwrite(_span->_fd, meta_t, sizeof(StripeMeta), _meta_pos[i][j]);
+      if (n < this->_meta_pos[i][j]) {
+        std::cout << "problem: " << errno << ":" << i << " " << j << std::endl;
+        zret = Errata::Message(0, errno, "Failed to write stripe header ");
+        // return zret;
+      }
     }
   }
   /// TODO: check the offsets!!!!!!!!!!!!!
-  //write dir entries in the disk
-  uint64_t offset_dir = _meta_pos[0][0].count()*8192 + vol_headerlen();
-  pwrite(this->_span->_fd, (char*)dir, vol_dirlen()-vol_headerlen()-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
+  // write dir entries in the disk
+  uint64_t offset_dir = _meta_pos[0][0].count() * 8192 + vol_headerlen();
+  pwrite(this->_span->_fd, (char *)dir, vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
 
-  offset_dir = _meta_pos[1][0].count()*8192 + vol_headerlen();
-  pwrite(this->_span->_fd, (char*)dir, vol_dirlen()-vol_headerlen()-ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
+  offset_dir = _meta_pos[1][0].count() * 8192 + vol_headerlen();
+  pwrite(this->_span->_fd, (char *)dir, vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
 
   return zret;
 }
@@ -1964,10 +1963,10 @@ Span::clearPermanently()
     for (auto *strp : _stripes) {
       strp->loadMeta();
       std::cout << "Clearing stripe @" << strp->_start << " of length: " << strp->_len << std::endl;
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0].count()*8192);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1].count()*8192);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0].count()*8192);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1].count()*8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0].count() * 8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1].count() * 8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0].count() * 8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1].count() * 8192);
     }
   } else {
     std::cout << "Clearing " << _path << " not performed, write not enabled" << std::endl;
