@@ -282,9 +282,9 @@ Stripe::InitializeMeta()
       _meta[i][j].version.ink_major = ts::CACHE_DB_MAJOR_VERSION;
       _meta[i][j].version.ink_minor = ts::CACHE_DB_MINOR_VERSION;
       _meta[i][j].agg_pos = _meta[i][j].last_write_pos = _meta[i][j].write_pos = this->_start;
-      _meta[i][j].phase = _meta[i][j].cycle = _meta[i][j].dirty = 0;
-      _meta[i][j].create_time                                   = time(nullptr);
-      _meta[i][j].sector_size                                   = DEFAULT_HW_SECTOR_SIZE;
+      _meta[i][j].phase = _meta[i][j].cycle = _meta[i][j].sync_serial = _meta[i][j].write_serial = _meta[i][j].dirty = 0;
+      _meta[i][j].create_time = time(nullptr);
+      _meta[i][j].sector_size = DEFAULT_HW_SECTOR_SIZE;
     }
   }
   if (!freelist) // freelist is not allocated yet
@@ -359,12 +359,13 @@ Stripe::updateHeaderFooter()
     for (int j = 0; j < 2; j++) {
       char *meta_t = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
       memcpy(meta_t, &_meta[i][j], sizeof(StripeMeta));
-      std::cout << _meta[i][j].magic << "::" << (&_meta[i][j])->magic << "::" << _meta_pos[i][j] << std::endl;
-      ssize_t n = pwrite(_span->_fd, meta_t, sizeof(StripeMeta), _meta_pos[i][j]);
-      if (n < this->_meta_pos[i][j]) {
-        std::cout << "problem: " << errno << ":" << i << " " << j << std::endl;
+      CacheStoreBlocks hdr_size = round_up(sizeof(StripeMeta));
+      ssize_t n                 = pwrite(_span->_fd, meta_t, hdr_size, _meta_pos[i][j]);
+      if (n < hdr_size) {
+        std::cout << "problem writing to disk: " << strerror(errno) << ":"
+                  << " " << n << std::endl;
         zret = Errata::Message(0, errno, "Failed to write stripe header ");
-        // return zret;
+        return zret;
       }
     }
   }
@@ -1101,7 +1102,8 @@ Stripe::loadMeta()
     } else if (_meta_pos[B][FOOT] > 0 && _meta[B][HEAD].sync_serial == _meta[B][FOOT].sync_serial) {
       this->updateLiveData(B);
     } else {
-      zret.push(0, 1, "Invalid stripe data - candidates found but sync serial data not valid.");
+      zret.push(0, 1, "Invalid stripe data - candidates found but sync serial data not valid. ", _meta[A][HEAD].sync_serial, ":",
+                _meta[A][FOOT].sync_serial, ":", _meta[B][HEAD].sync_serial, ":", _meta[B][FOOT].sync_serial);
     }
   }
 
@@ -1887,6 +1889,8 @@ Span::clear()
   int n   = (eff - sizeof(ts::SpanHeader)) / (CacheStripeBlocks::SCALE + sizeof(CacheStripeDescriptor));
   _offset = _base + round_up(sizeof(ts::SpanHeader) + (n - 1) * sizeof(CacheStripeDescriptor));
   stripe  = new Stripe(this, _offset, _len - _offset);
+  stripe->vol_init_data();
+  stripe->InitializeMeta();
   _stripes.push_back(stripe);
   _free_space = stripe->_len;
 
