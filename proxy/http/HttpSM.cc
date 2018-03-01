@@ -4428,24 +4428,49 @@ HttpSM::do_range_setup_if_necessary()
     do_range_parse(field);
 
     if (t_state.range_setup == HttpTransact::RANGE_REQUESTED) {
+      bool do_transform = false;
+
       if (!t_state.range_in_cache) {
         Debug("http_range", "range can't be satisfied from cache, force origin request");
         t_state.cache_lookup_result = HttpTransact::CACHE_LOOKUP_MISS;
         return;
       }
 
-      // if only one range entry and pread is capable, no need transform range
-      if (t_state.num_range_fields == 1 && cache_sm.cache_read_vc->is_pread_capable()) {
-        t_state.range_setup = HttpTransact::RANGE_NOT_TRANSFORM_REQUESTED;
-      } else if (api_hooks.get(TS_HTTP_RESPONSE_TRANSFORM_HOOK) == nullptr) {
-        Debug("http_trans", "Unable to accelerate range request, fallback to transform");
-        content_type = t_state.cache_info.object_read->response_get()->value_get(MIME_FIELD_CONTENT_TYPE, MIME_LEN_CONTENT_TYPE,
-                                                                                 &field_content_type_len);
-        // create a Range: transform processor for requests of type Range: bytes=1-2,4-5,10-100 (eg. multiple ranges)
-        range_trans = transformProcessor.range_transform(mutex.get(), t_state.ranges, t_state.num_range_fields,
-                                                         &t_state.hdr_info.transform_response, content_type, field_content_type_len,
-                                                         t_state.cache_info.object_read->object_size_get());
-        api_hooks.append(TS_HTTP_RESPONSE_TRANSFORM_HOOK, range_trans);
+      if (t_state.num_range_fields > 1) {
+        if (0 == t_state.txn_conf->allow_multi_range) {
+          t_state.range_setup = HttpTransact::RANGE_NONE;                                 // No Range required (not allowed)
+          t_state.hdr_info.client_request.field_delete(MIME_FIELD_RANGE, MIME_LEN_RANGE); // ... and nuke the Range header too
+          t_state.num_range_fields = 0;
+        } else if (1 == t_state.txn_conf->allow_multi_range) {
+          do_transform = true;
+        } else {
+          t_state.num_range_fields = 0;
+          t_state.range_setup      = HttpTransact::RANGE_NOT_SATISFIABLE;
+        }
+      } else {
+        if (cache_sm.cache_read_vc->is_pread_capable()) {
+          // If only one range entry and pread is capable, no need transform range
+          t_state.range_setup = HttpTransact::RANGE_NOT_TRANSFORM_REQUESTED;
+        } else {
+          do_transform = true;
+        }
+      }
+
+      // We have to do the transform on (allowed) multi-range request, *or* if the VC is not pread capable
+      if (do_transform) {
+        if (api_hooks.get(TS_HTTP_RESPONSE_TRANSFORM_HOOK) == nullptr) {
+          Debug("http_trans", "Unable to accelerate range request, fallback to transform");
+          content_type = t_state.cache_info.object_read->response_get()->value_get(MIME_FIELD_CONTENT_TYPE, MIME_LEN_CONTENT_TYPE,
+                                                                                   &field_content_type_len);
+          // create a Range: transform processor for requests of type Range: bytes=1-2,4-5,10-100 (eg. multiple ranges)
+          range_trans = transformProcessor.range_transform(
+            mutex.get(), t_state.ranges, t_state.num_range_fields, &t_state.hdr_info.transform_response, content_type,
+            field_content_type_len, t_state.cache_info.object_read->object_size_get());
+          api_hooks.append(TS_HTTP_RESPONSE_TRANSFORM_HOOK, range_trans);
+        } else {
+          // ToDo: Do we do something here? The theory is that multiple transforms do not behave well with
+          // the range transform needed here.
+        }
       }
     }
   }
@@ -5408,14 +5433,16 @@ HttpSM::handle_server_setup_error(int event, void *data)
         ua_producer->alive         = false;
         ua_producer->handler_state = HTTP_SM_POST_SERVER_FAIL;
         tunnel.handleEvent(VC_EVENT_ERROR, c->write_vio);
+        return;
       }
     } else {
       // c could be null here as well
       if (c != nullptr) {
         tunnel.handleEvent(event, c->write_vio);
+        return;
       }
     }
-    return;
+    // If there is no consumer, let the event pass through to shutdown
   } else {
     if (post_transform_info.vc) {
       HttpTunnelConsumer *c = tunnel.get_consumer(post_transform_info.vc);
@@ -5452,14 +5479,16 @@ HttpSM::handle_server_setup_error(int event, void *data)
     // if (vio->op == VIO::WRITE && vio->ndone == 0) {
     if (server_entry->write_vio && server_entry->write_vio->nbytes > 0 && server_entry->write_vio->ndone == 0) {
       t_state.current.state = HttpTransact::CONNECTION_ERROR;
-      if (server_entry) {
-        ink_assert(server_entry->vc_type == HTTP_SERVER_VC);
-        vc_table.cleanup_entry(server_entry);
-        server_entry   = nullptr;
-        server_session = nullptr;
-      }
     } else {
       t_state.current.state = HttpTransact::INACTIVE_TIMEOUT;
+    }
+    // Clean up the vc_table entry so any events in play to the timed out server vio
+    // don't get handled.  The connection isn't there.
+    if (server_entry) {
+      ink_assert(server_entry->vc_type == HTTP_SERVER_VC);
+      vc_table.cleanup_entry(server_entry);
+      server_entry   = nullptr;
+      server_session = nullptr;
     }
     break;
   default:

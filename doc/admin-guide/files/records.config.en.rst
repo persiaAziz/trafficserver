@@ -1739,6 +1739,22 @@ Security
    post body larger than this limit the response will be terminated with
    413 - Request Entity Too Large and logged accordingly.
 
+.. ts:cv:: CONFIG proxy.config.http.allow_multi_range INT 0
+   :reloadable:
+   :overridable:
+
+   This option allows the administrator to configure different behavior and
+   handling of requests with multiple ranges in the ``Range`` header.
+
+   ===== ======================================================================
+   Value Description
+   ===== ======================================================================
+   ``0`` Do not allow multiple ranges, effectively ignoring the ``Range`` header
+   ``1`` Allows multiple ranges. This can be potentially dangerous since well
+         formed requests can cause excessive resource consumption on the server.
+   ``2`` Similar to 0, except return a 416 error code and no response body.
+   ===== ======================================================================
+
 Cache Control
 =============
 
@@ -3333,9 +3349,7 @@ SSL Termination
 
 .. ts:cv:: CONFIG proxy.config.ssl.wire_trace_server_name STRING NULL
 
-   This specifies the server name for which wire_traces should be
-   printed. This only works if traffic_server is built with
-   TS_USE_TLS_SNI flag set to true.
+   This specifies the server name for which wire_traces should be printed.
 
 Client-Related Configuration
 ----------------------------
@@ -3381,6 +3395,23 @@ Client-Related Configuration
 
    Specifies the location of the certificate authority file against
    which the origin server will be verified.
+
+.. ts:cv:: CONFIG proxy.config.ssl.client.SSLv3 INT 0
+
+   Enables (``1``) or disables (``0``) SSLv3 in the ATS client context. Disabled by default
+
+.. ts:cv:: CONFIG proxy.config.ssl.client.TLSv1 INT 1
+
+   Enables (``1``) or disables (``0``) TLSv1 in the ATS client context. If not specified, enabled by default
+
+.. ts:cv:: CONFIG proxy.config.ssl.client.TLSv1_1 INT 1
+
+   Enables (``1``) or disables (``0``) TLSv1_1 in the ATS client context. If not specified, enabled by default
+
+.. ts:cv:: CONFIG proxy.config.ssl.client.TLSv1_2 INT 1
+
+   Enables (``1``) or disables (``0``) TLSv1_2 in the ATS client context. If not specified, enabled by default
+
 
 OCSP Stapling Configuration
 ===========================
