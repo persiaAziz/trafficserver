@@ -219,6 +219,7 @@ struct Stripe {
   bool dir_valid(CacheDirEntry *e);
   bool validate_sync_serial();
   Errata updateHeaderFooter();
+  Errata updateHeaderFooter1();
   Errata InitializeMeta();
 };
 
@@ -299,7 +300,6 @@ Stripe::InitializeMeta()
   for (int i = 0; i < _segments; i++) {
     dir_init_segment(i);
   }
-  // vol_init_dir(d);
   return zret;
 }
 
@@ -354,6 +354,64 @@ Stripe::updateHeaderFooter()
     zret.push(0, 1, "Writing Not Enabled.. Please use --write to enable writing to disk");
     return zret;
   }
+  // push copy A first
+  char *meta_t = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
+  memcpy(meta_t, &_meta[0][0], sizeof(StripeMeta));
+  // copy freelist
+  memcpy(meta_t + sizeof(StripeMeta) - sizeof(uint64_t), freelist, sizeof(uint16_t) * (_segments));
+  // copy dirs
+  int dir_size = vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta));
+  memcpy(meta_t + vol_headerlen(), (char *)dir, dir_size);
+  // copy footer
+  memcpy(meta_t + footer_offset, &_meta[0][1], sizeof(StripeMeta));
+  ssize_t n = pwrite(_span->_fd, meta_t, vol_dirlen(), _meta_pos[0][0]);
+  if (n < vol_dirlen()) {
+    std::cout << "problem writing to disk: " << strerror(errno) << ":"
+              << " " << n << std::endl;
+    zret = Errata::Message(0, errno, "Failed to write stripe header ");
+    return zret;
+  }
+
+  // Now push copy B
+  memset(meta_t, 0, this->vol_dirlen());
+  memcpy(meta_t, &_meta[1][0], sizeof(StripeMeta));
+  // copy freelist
+  memcpy(meta_t + sizeof(StripeMeta) - sizeof(uint64_t), freelist, sizeof(uint16_t) * (_segments));
+  // copy dirs
+  dir_size = vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta));
+  memcpy(meta_t + vol_headerlen(), (char *)dir, dir_size);
+  // copy footer
+  memcpy(meta_t + footer_offset, &_meta[1][1], sizeof(StripeMeta));
+  n = pwrite(_span->_fd, meta_t, vol_dirlen(), _meta_pos[1][0]);
+  if (n < vol_dirlen()) {
+    std::cout << "problem writing to disk: " << strerror(errno) << ":"
+              << " " << n << std::endl;
+    zret = Errata::Message(0, errno, "Failed to write stripe header ");
+    return zret;
+  }
+  return zret;
+}
+
+Errata
+Stripe::updateHeaderFooter1()
+{
+  Errata zret;
+  this->vol_init_data();
+  Bytes footer_offset = Bytes(vol_dirlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
+  _meta_pos[0][0]     = round_down(_start);
+  _meta_pos[0][1]     = round_down(_start + footer_offset);
+  _meta_pos[1][0]     = round_down(this->_start + Bytes(vol_dirlen()));
+  _meta_pos[1][1]     = round_down(this->_start + Bytes(vol_dirlen()) + footer_offset);
+  std::cout << "updating header " << _meta_pos[0][0] << std::endl;
+  std::cout << "updating header " << _meta_pos[0][1] << std::endl;
+  std::cout << "updating header " << _meta_pos[1][0] << std::endl;
+  std::cout << "updating header " << _meta_pos[1][1] << std::endl;
+  InitializeMeta();
+
+  if (!OPEN_RW_FLAG) {
+    zret.push(0, 1, "Writing Not Enabled.. Please use --write to enable writing to disk");
+    return zret;
+  }
   static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
   for (int i = 0; i < 2; i++) {
     for (int j = 0; j < 2; j++) {
@@ -369,12 +427,19 @@ Stripe::updateHeaderFooter()
       }
     }
   }
-  /// TODO: check the offsets!!!!!!!!!!!!!
+
+  // copy the freelistsinto the disk
+
+  CacheStoreBlocks offset_fl = round_up(_meta_pos[0][0] + Bytes(sizeof(StripeMeta) - sizeof(uint16_t)));
+  pwrite(this->_span->_fd, this->freelist, sizeof(freelist), offset_fl);
+  offset_fl = round_up(_meta_pos[1][0] + Bytes(sizeof(StripeMeta) - sizeof(uint16_t)));
+  pwrite(this->_span->_fd, this->freelist, sizeof(freelist), offset_fl);
+
   // write dir entries in the disk
-  uint64_t offset_dir = _meta_pos[0][0].count() * 8192 + vol_headerlen();
+  CacheStoreBlocks offset_dir = round_up(_meta_pos[0][0] + Bytes(vol_headerlen()));
   pwrite(this->_span->_fd, (char *)dir, vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
 
-  offset_dir = _meta_pos[1][0].count() * 8192 + vol_headerlen();
+  offset_dir = round_up(_meta_pos[1][0] + Bytes(vol_headerlen()));
   pwrite(this->_span->_fd, (char *)dir, vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
 
   return zret;
@@ -396,8 +461,7 @@ Stripe::vol_dirlen()
 void
 Stripe::vol_init_data_internal()
 {
-  this->_buckets =
-    ((this->_len.count() * 8192 - (this->_content - this->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
+  this->_buckets  = ((this->_len - (this->_content - this->_start)) / cache_config_min_average_object_size) / DIR_DEPTH;
   this->_segments = (this->_buckets + (((1 << 16) - 1) / DIR_DEPTH)) / ((1 << 16) / DIR_DEPTH);
   this->_buckets  = (this->_buckets + this->_segments - 1) / this->_segments;
   this->_content  = this->_start + Bytes(2 * vol_dirlen());
@@ -1967,10 +2031,10 @@ Span::clearPermanently()
     for (auto *strp : _stripes) {
       strp->loadMeta();
       std::cout << "Clearing stripe @" << strp->_start << " of length: " << strp->_len << std::endl;
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0].count() * 8192);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1].count() * 8192);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0].count() * 8192);
-      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1].count() * 8192);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][0]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[0][1]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][0]);
+      n = pwrite(_fd, zero, sizeof(zero), strp->_meta_pos[1][1]);
     }
   } else {
     std::cout << "Clearing " << _path << " not performed, write not enabled" << std::endl;
