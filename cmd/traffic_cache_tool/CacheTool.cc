@@ -219,7 +219,6 @@ struct Stripe {
   bool dir_valid(CacheDirEntry *e);
   bool validate_sync_serial();
   Errata updateHeaderFooter();
-  Errata updateHeaderFooter1();
   Errata InitializeMeta();
 };
 
@@ -389,59 +388,6 @@ Stripe::updateHeaderFooter()
     zret = Errata::Message(0, errno, "Failed to write stripe header ");
     return zret;
   }
-  return zret;
-}
-
-Errata
-Stripe::updateHeaderFooter1()
-{
-  Errata zret;
-  this->vol_init_data();
-  Bytes footer_offset = Bytes(vol_dirlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)));
-  _meta_pos[0][0]     = round_down(_start);
-  _meta_pos[0][1]     = round_down(_start + footer_offset);
-  _meta_pos[1][0]     = round_down(this->_start + Bytes(vol_dirlen()));
-  _meta_pos[1][1]     = round_down(this->_start + Bytes(vol_dirlen()) + footer_offset);
-  std::cout << "updating header " << _meta_pos[0][0] << std::endl;
-  std::cout << "updating header " << _meta_pos[0][1] << std::endl;
-  std::cout << "updating header " << _meta_pos[1][0] << std::endl;
-  std::cout << "updating header " << _meta_pos[1][1] << std::endl;
-  InitializeMeta();
-
-  if (!OPEN_RW_FLAG) {
-    zret.push(0, 1, "Writing Not Enabled.. Please use --write to enable writing to disk");
-    return zret;
-  }
-  static const size_t SBSIZE = CacheStoreBlocks::SCALE; // save some typing.
-  for (int i = 0; i < 2; i++) {
-    for (int j = 0; j < 2; j++) {
-      char *meta_t = (char *)ats_memalign(ats_pagesize(), this->vol_dirlen());
-      memcpy(meta_t, &_meta[i][j], sizeof(StripeMeta));
-      CacheStoreBlocks hdr_size = round_up(sizeof(StripeMeta));
-      ssize_t n                 = pwrite(_span->_fd, meta_t, hdr_size, _meta_pos[i][j]);
-      if (n < hdr_size) {
-        std::cout << "problem writing to disk: " << strerror(errno) << ":"
-                  << " " << n << std::endl;
-        zret = Errata::Message(0, errno, "Failed to write stripe header ");
-        return zret;
-      }
-    }
-  }
-
-  // copy the freelistsinto the disk
-
-  CacheStoreBlocks offset_fl = round_up(_meta_pos[0][0] + Bytes(sizeof(StripeMeta) - sizeof(uint16_t)));
-  pwrite(this->_span->_fd, this->freelist, sizeof(freelist), offset_fl);
-  offset_fl = round_up(_meta_pos[1][0] + Bytes(sizeof(StripeMeta) - sizeof(uint16_t)));
-  pwrite(this->_span->_fd, this->freelist, sizeof(freelist), offset_fl);
-
-  // write dir entries in the disk
-  CacheStoreBlocks offset_dir = round_up(_meta_pos[0][0] + Bytes(vol_headerlen()));
-  pwrite(this->_span->_fd, (char *)dir, vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
-
-  offset_dir = round_up(_meta_pos[1][0] + Bytes(vol_headerlen()));
-  pwrite(this->_span->_fd, (char *)dir, vol_dirlen() - vol_headerlen() - ROUND_TO_STORE_BLOCK(sizeof(StripeMeta)), offset_dir);
-
   return zret;
 }
 
