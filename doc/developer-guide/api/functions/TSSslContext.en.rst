@@ -45,8 +45,9 @@ server :arg:`name`.
 created from :file:`ssl_multicert.config` matchin against the server
 :arg:`address`.
 
-:func:`TSSslOCSPCallbackSet` sets the OCSP callback described in ATS
-to the SSL context passed as an argument. This API is useful for contexts created externally via plugin
+:func:`TSSslOCSPCallbackSet` sets the OCSP callback available in |TS|
+to the SSL context passed as an argument. This API will allow the plugin developer
+to use |TS|'s OCSP query,response and caching mechanism.
 
 
 See also
