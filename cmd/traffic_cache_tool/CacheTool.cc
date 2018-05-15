@@ -1380,7 +1380,7 @@ Scan_Cache(ts::FilePath const &regex_path)
     }
     cache.dumpSpans(Cache::SpanDumpDepth::SPAN);
     for (auto sp : cache._spans) {
-      threadPool.emplace_back(scan_span, sp);
+      threadPool.emplace_back(scan_span, sp, regex_path);
     }
     for (auto &th : threadPool)
       th.join();
