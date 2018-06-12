@@ -125,12 +125,12 @@ CacheScan::unmarshal(MIMEFieldBlockImpl *mf, intptr_t offset)
 {
   Errata zret;
   HDR_UNMARSHAL_PTR(mf->m_next, MIMEFieldBlockImpl, offset);
-
+  ts::MemSpan mf_mem((char *)mf, mf->m_length);
   for (uint32_t index = 0; index < mf->m_freetop; index++) {
     MIMEField *field = &(mf->m_field_slots[index]);
 
     // check if out of bounds
-    if (((char *)field - (char *)mf) > mf->m_length) {
+    if (!mf_mem.contains((char *)field)) {
       zret.push(0, 0, "Out of bounds memory in the deserialized MIMEFieldBlockImpl");
       return zret;
     }
@@ -378,7 +378,7 @@ CacheScan::get_alternates(const char *buf, int length)
       } else if (!a->m_request_hdr.m_http) {
         std::cerr << "no http object found in the request header object" << std::endl;
         return zret;
-      } else if (((char *)a->m_request_hdr.m_http - buf) > length) {
+      } else if (!doc_mem.contains((char *)a->m_request_hdr.m_http)) {
         std::cerr << "out of bounds request header in the alternate" << std::endl;
         return zret;
       }
