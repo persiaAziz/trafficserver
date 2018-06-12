@@ -1,0 +1,12 @@
+#!/bin/sh
+
+exec 2>&1
+cd /home/y || exit 1
+
+USER="$(user)"
+
+if [ -z "$USER" ]; then
+  USER="nobody"
+fi
+
+exec setuidgid $USER bin64/redis_subscriber 

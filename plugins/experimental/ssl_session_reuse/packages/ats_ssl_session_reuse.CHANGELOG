@@ -1,0 +1,171 @@
+Version 7.0.38 (04/11/2018,shinrich)
+  * YTSATS-2067: Fix ats_ssl_session_reuse core dumps
+Version 7.0.37 (12/20/2017,shinrich)
+  * YTSATS-62: Streamline ssl_session_reuse code for future open source
+Version 5.0.36 (12/12/2017, jkenny)
+  * YTSATS-1681: Session reuse requires Yahoo-openssl-1.0.2m or better
+Version 5.0.35 (10/16/2017, shinrich)
+  * YTSATS-1573: Fix ticket session reuse with newer openssl
+Version 5.0.34 (10/02/2017, derekd)
+  * YTSATS-1437: Uses ATS compiler flags, cleans up build
+  * YTSATS-1548: restores libssl_sess_reuse.so, corrects packagin
+  * packaging fix
+Version 5.0.32 (07/21/2017, jkenny)
+  * hack makefile to label packages correctly.
+Version 5.0.31 (06/15/2017, jkenny)
+  * tweak to fix issue with SD builds causing bad bits
+Version 5.0.30 (06/15/2017, davet)
+  * [YTSATS-1215] Add automatic & local rotation of session-ticket-encryption-key
+  * [YTSATS-1288] Get ats_ssl_session_reuse to build in screwdriver
+  * [YTSATS-1242] Remove log4cxx dependency, replace logging.
+  * [YTSATS-1110] Remove yconfig dependency. Change config from xml to flat file.
+  * [YTSATS-1274] Remove buildyblocks build dependency
+Version 5.0.29 (12/08/2016, davet)
+  * [YTSATS-1081] Redis Server needs authentication
+Version 5.0.28 (11/22/2016, davet)
+  * [YTSATS-1110] Remove yconfig dependency, use non-xml config
+Version 5.0.27 (11/22/2016, davet)
+  * [YTSATS-1081] Redis Server needs authentication
+Version 5.0.26 (10/31/2016, davet)
+  * [YTSATS-1045] ycrKeyDbInit() & ycrKeyDbDestroy() shouldn't be called.
+Version 5.0.25 (08/23/2016, shinrich)
+  * [YTSATS-405] Potential Stack Overflow in SSL reuse plugin
+Version 5.0.24 (03/09/2016, ffcai)
+  * [YTSATS-779] Catch log4cxx exception to prevent crash when disk is full
+Version 5.0.23 (02/23/2016, ffcai)
+  * [YTSATS-720] add size check for mdbm value
+  * [YTSATS-780] fix typo for mdbm cache mode
+Version 5.0.22 (11/23/2015, shinrich)
+  * Add fpesce's changes to track session reuse per transaction with the correct name.
+Version 5.0.21 (11/6/2015, shinrich)
+  * Add fpesce's changes to track session reuse per transaction
+Version 5.0.20 (6/29/2015, shinrich)
+  * ytsats-396: Fix potential buffer overflow.  Not on quarantine branch.
+Version 5.0.19 (6/29/2015, shinrich)
+  * ytsats-396: Fix potential buffer overflow
+Version 5.0.18 (3/31/2015, kangli)
+  * fix the accuracy of session id stats
+Version 5.0.17 (3/17/2015, sunwei) 
+  * Remove ats_plugin_configutron - by kennyp
+Version 5.0.16 (2/12/2015, sunwei)
+  * [Bug 7265029] Support configurable mdbm cache eviction algo (gdsf, lru, lfu) to replace MdbmCleaner - by mnagaya.
+    Note that you need to clear mdbm before changing the algo.
+Version 5.0.15 (1/13/2015, kangli)
+  * add support for ykeykey key service
+Version 5.0.14 (1/20/2015, ffcai)
+  * graceful return from MdbmCleaner
+  * call mdbm_punlock when break out of mdbm iteration loop
+Version 5.0.13 (1/17/2015, sunwei)
+  * reset mdbm_max_lifetime
+  * [Bug 7248520] support SuperFasthash function - by mnagaya. Note that you need to safely remove the
+    existing mdbm file before changing the hash function
+Version 5.0.12 (1/15/2015, ffcai, Masakazu Nagaya)
+  * Revert mdbm size to 2G, add check for mdbm mount/umount
+  * Fix a potential issue
+Version 5.0.11 (1/13/2015, sunwei)
+  * [Bug 7248421] Add enable_sessionId_cache config and make logging yinst settable
+Version 5.0.10 (12/02/2014, ffcai)
+  * Change mdbm init size from 2G to 512M, consistent with default yinst settings.
+Version 5.0.9 (11/25/2014, ffcai)
+  * Fix the configuration mdbm_max_lifetime and add slowlog for session operations.
+Version 5.0.8 (10/14/2014, kangli)
+  * Add a warning log to notify expired key and integrate the  error message in yamas 
+Version 5.0.7 (09/19/2014, kangli)
+  *[Bug 7132054] Yamas metrics would lose aggregation type if metrics became stale
+Version 5.0.6 (09/11/2014, ffcai)
+  * Set the callback function for generating new session ids, improve get session efficiency
+  * Note: upgrading the plugin from older version to 5.0.6 or above, please clear the old cache 
+          since the schema of sessionId is changed that may cause the incompatible issue. 
+          For instance, `yinst stop ats ats_ssl_session_reuse; sudo umount /home/y/var/tmpfs_mdbm`
+Version 5.0.5 (08/12/2014, ffcai)
+  * Add store in redis enhancement
+Version 5.0.4 (08/07/2014, kangli, sunwei)
+  * Add metrics
+  * Padding session ticket keyname
+  * Tweak LONG_DESC
+Version 5.0.3 (06/25/2014)
+  * merge update from 4.0 branch since 0.1.26
+Version 5.0.2 (06/19/2014, sudheerv)
+  * build a new version since 5.0.2 to pick ats-5.0.0
+Version 5.0.1 (06/05/2014, sudheerv)
+  * build a new version since 5.0.0 is coring on ycpi in log4cxxx library
+Version 5.0.0 (04/29/2014, sudheerv)
+  * build initial 5.0.0 version of the plugin
+Version 0.1.33 (06/20/2014, sunwei)
+  * Fix typo
+Version 0.1.32 (06/19/2014, sunwei)
+  * Fine-tune lifetime
+Version 0.1.31 (06/18/2014, sunwei)
+  * Change the memHigh
+Version 0.1.30 (06/16/2014, sunwei)
+  * Bump up version
+Version 0.1.29 (06/16/2014, sunwei)
+  * Fix the calculation of tmpfs size
+  * Dynamic lifetime 
+  * Fix high CPU ratio on a single core
+Version 0.1.28 (05/16/2014, sunwei)
+  * Tweak debugging logs
+  * Add infinite sub_mdbm_wlock_retries  
+Version 0.1.27 (05/09/2014, sunwei)
+  * Change a few parameters to be configurable
+Version 0.1.26 (05/08/2014, sunwei)
+  * Tune performance
+Version 0.1.25 (04/14/2014, sunwei)
+  * Remove mdbm locks after a reboot when using tmpfs
+Version 0.1.24 (04/04/2014, sunwei)
+  * Upgrade to hiredis-0.11
+  * Remove the condition around broadcasting
+  * Revert mutex
+Version 0.1.23 (04/01/2014, sunwei)
+  * Add mutex for hiredis API
+Version 0.1.22 (03/28/2014, sunwei)
+  * Enforce to be failure when key is invalid
+Version 0.1.21 (03/28/2014, sunwei)
+  * Remove deactivate script
+Version 0.1.20 (03/28/2014, sunwei)
+  * Add tmpfs creation script
+Version 0.1.19 (03/26/2014, sunwei)
+  * Remove mdbm cleanup function
+Version 0.1.18 (03/24/2014, sunwei)
+  * Fix context destroy
+Version 0.1.17 (03/23/2014, sunwei)
+  * Remove O_ASYNC
+Version 0.1.16 (03/22/2014, sunwei)
+  * Tune some parameters
+Version 0.1.15 (03/21/2014, manisht)
+  * Add a periodic mdbm cleanup thread
+Version 0.1.14 (03/19/2014, manisht)
+  * Reduce the scope of the mdbm lock in the subscriber
+Version 0.1.13 (03/18/2014, sunwei)
+  * Tweak mdbm lock
+Version 0.1.12 (03/14/2014, manisht)
+  * Removing some extra yinst settings which are not needed anymore
+Version 0.1.11 (03/06/2014, manisht)
+  * Individual subscribers should dup a global handle rather than each opening the mdbm
+  * Channel names can contain '.'
+  * Do proper cleanup when daemontools kills the program by issuing a SIGTERM
+Version 0.1.10 (03/05/2014, sunwei)
+  * [Bug 6819392] Remove redisSetTimeout from blocking subscriber
+Version 0.1.9 (03/04/2014, manisht)
+  * mdbm key array size calculations are wrong
+Version 0.1.8 (03/04/2014, manisht)
+  * mdbm functions doint like char*, they want char[] 
+Version 0.1.7 (03/04/2014, manisht)
+  * Should not use the same context when publish fails
+  * Enhance the debug logging to show more info
+Version 0.1.6 (02/28/2014, manisht)
+  * No need to daemonize in code when managing your software via daemontools
+Version 0.1.5 (02/28/2014, manisht)
+  * Windows newlines are causing daemontools to freak out
+Version 0.1.4 (02/28/2014, manisht)
+  * Fix some debug logs in the code
+Version 0.1.3 (02/28/2014, manisht)
+  * All yinst settings should show on the console when a user does yinst set
+  * Add daemontools support for the subscriber daemon
+  * Fix the default valuse of timeouts given in microseconds
+Version 0.1.2 (2/27/2014, sunwei)
+  * Add yinst setting to Long Description
+Version 0.1.1 (2/27/2014, sunwei)
+  * Modify yicf and a few fix
+Version 0.1.0 (2/25/2014, sunwei)
+  * Initial release of ats_ssl_session_reuse

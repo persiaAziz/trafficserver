@@ -1,0 +1,24 @@
+ATS ssl session reuse plugin for session ticket and session ID. (Runbook: http://yo/ats_ssl_session_reuse)
+
+Yinst settings and default values:
+   * ats_ssl_session_reuse.app_name=app
+   * ats_ssl_session_reuse.cluster_name=gq1
+   * ats_ssl_session_reuse.key_type=1                    # 1: ykeydb,   2:ykeykey
+   * ats_ssl_session_reuse.key_version=0
+   * ats_ssl_session_reuse.key_update_interval=0              # 0: disable key rotation. in seconds
+   * ats_ssl_session_reuse.session_lifetime=7200              # session lifetime, in seconds
+   * ats_ssl_session_reuse.redis_endpoints=localhost:6379     # Points to the redis_y servers, multiple servers can be seperated by comma
+   * ats_ssl_session_reuse.pub_worker_num=5
+   * ats_ssl_session_reuse.pub_redis_conn_timeout=20000       # in milliseconds
+   * ats_ssl_session_reuse.pub_redis_retrydelay=10000         # in microseconds 
+   * ats_ssl_session_reuse.pub_redis_publish_retries=3
+   * ats_ssl_session_reuse.pub_redis_conn_retries=3
+   * ats_ssl_session_reuse.pub_max_queue_message=10000
+   * ats_ssl_session_reuse.sub_worker_num_per_endpoint=5
+   * ats_ssl_session_reuse.sub_redis_conn_timeout=20000       # in milliseconds
+   * ats_ssl_session_reuse.sub_redis_retrydelay=10000         # in microseconds
+   * ats_ssl_session_reuse.sub_redis_max_queue_messages=10000  
+   * ats_ssl_session_reuse.default_logger_name=ssr
+   * ats_ssl_session_reuse.enable_redis_store=0               # 0: disable store in redis
+   * ats_ssl_session_reuse.pool_redis_conn_timeout=5          # in milliseconds
+   * ats_ssl_session_reuse.get_session_timeout=20             # in milliseconds

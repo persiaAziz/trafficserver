@@ -1,0 +1,23 @@
+#!/usr/bin/perl -w
+
+print <<END;
+
+log4j.rootCategory=FATAL,rootAppender
+log4j.category.ssr=$ENV{'ats_ssl_session_reuse__log_level'},ssrAppender
+log4j.additivity.ssr=false
+
+#Root Appender not used for logging
+log4j.appender.rootAppender=org.apache.log4j.ConsoleAppender
+log4j.appender.rootAppender.layout=org.apache.log4j.PatternLayout
+log4j.appender.rootAppender.layout.ConversionPattern=%d{ISO8601}|%t|%p|%m%n
+
+#Main Log file used for all debug logging
+log4j.appender.ssrAppender=org.apache.log4j.RollingFileAppender
+log4j.appender.ssrAppender.fileName=$ENV{'ats_ssl_session_reuse__log_filename'}
+log4j.appender.ssrAppender.maxFileSize=$ENV{'ats_ssl_session_reuse__log_size'}
+log4j.appender.ssrAppender.maxBackupIndex=10
+log4j.appender.ssrAppender.maxFileAge=1440
+log4j.appender.ssrAppender.layout=org.apache.log4j.PatternLayout
+log4j.appender.ssrAppender.layout.ConversionPattern=%d{ISO8601}|%t|%p|%m%n
+
+END

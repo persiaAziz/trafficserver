@@ -1,0 +1,182 @@
+#!/usr/local/bin/perl -w
+
+## FIXME: This assumes root, and if ROOT(/home/y) changes we've got to change the default
+my $root="/home/y";
+
+$pub_worker_num = 5;
+if( defined($ENV{'ats_ssl_session_reuse__pub_worker_num'}) ) {
+    $pub_worker_num = $ENV{'ats_ssl_session_reuse__pub_worker_num'};
+}
+
+$redis_endpoints = 'localhost:6379';
+if ( defined($ENV{'ats_ssl_session_reuse__redis_endpoints'}) ) {
+    $redis_endpoints = $ENV{'ats_ssl_session_reuse__redis_endpoints'};
+}
+
+$pub_redis_conn_timeout = 20000;
+if ( defined($ENV{'ats_ssl_session_reuse__pub_redis_conn_timeout'}) ) {
+    $pub_redis_conn_timeout = $ENV{'ats_ssl_session_reuse__pub_redis_conn_timeout'};
+}
+
+$pub_redis_retrydelay = 5000000;
+if ( defined($ENV{'ats_ssl_session_reuse__pub_redis_retrydelay'}) ) {
+    $pub_redis_retrydelay = $ENV{'ats_ssl_session_reuse__pub_redis_retrydelay'};
+}
+
+$pub_redis_publish_retries = 3;
+if ( defined($ENV{'ats_ssl_session_reuse__pub_redis_publish_retries'}) ) {
+    $pub_redis_publish_retries = $ENV{'ats_ssl_session_reuse__pub_redis_publish_retries'};
+}
+
+$pub_redis_conn_retries = 3;
+if ( defined($ENV{'ats_ssl_session_reuse__pub_redis_conn_retries'}) ) {
+    $pub_redis_conn_retries = $ENV{'ats_ssl_session_reuse__pub_redis_conn_retries'};
+}
+
+$pub_max_queue_message = 10000;
+if ( defined($ENV{'ats_ssl_session_reuse__pub_max_queue_message'}) ) {
+    $pub_max_queue_message = $ENV{'ats_ssl_session_reuse__pub_max_queue_message'};
+}
+
+$cluster_name = 'gq1';
+if ( defined($ENV{'ats_ssl_session_reuse__cluster_name'}) ) {
+    $cluster_name = $ENV{'ats_ssl_session_reuse__cluster_name'};
+}
+
+$pool_redis_conn_timeout = 5;
+if ( defined($ENV{'ats_ssl_session_reuse__pool_redis_conn_timeout'}) ) {
+    $pool_redis_conn_timeout = $ENV{'ats_ssl_session_reuse__pool_redis_conn_timeout'};
+}
+
+$get_session_timeout = 20;
+if ( defined($ENV{'ats_ssl_session_reuse__get_session_timeout'}) ) {
+    $get_session_timeout = $ENV{'ats_ssl_session_reuse__get_session_timeout'};
+}
+
+
+print ("\n## start pub config settings\n");
+print ("pubconfig.PubNumWorkers=$pub_worker_num\n");
+print ("pubconfig.PubRedisEndpoints=$redis_endpoints\n");
+print ("# in milliseconds\n");
+print ("pubconfig.PubRedisConnectTimeout=$pub_redis_conn_timeout\n");
+print ("# in microseconds\n");
+print ("pubconfig.PubRedisRetryDelay=$pub_redis_retrydelay\n");
+print ("pubconfig.PubRedisPublishTries=$pub_redis_publish_retries\n");
+print ("pubconfig.PubRedisConnectTries=$pub_redis_conn_retries\n");
+print ("pubconfig.PubMaxQueuedMessages=$pub_max_queue_message\n");
+print ("pubconfig.PubColoChannelId=$cluster_name\n");
+print ("# in milliseconds\n");
+print ("pubconfig.PoolRedisConnectTimeout=$pool_redis_conn_timeout\n");
+print ("# in milliseconds\n");
+print ("pubconfig.GetSessionTimeout=$get_session_timeout\n");
+print ("## end pub config settings\n");
+
+$sub_worker_num_per_endpoint = 5;
+if ( defined($ENV{'ats_ssl_session_reuse__sub_worker_num_per_endpoint'}) ) {
+    $sub_worker_num_per_endpoint = $ENV{'ats_ssl_session_reuse__sub_worker_num_per_endpoint'};
+}
+
+#$sub_redis_endpoints = 'localhost:6379';
+#if ( defined($ENV{'ats_ssl_session_reuse__sub_redis_endpoints'}) ) {
+#    $sub_redis_endpoints = $ENV{'ats_ssl_session_reuse__sub_redis_endpoints'};
+#}
+
+$sub_redis_conn_timeout = 20000;
+if ( defined($ENV{'ats_ssl_session_reuse__sub_redis_conn_timeout'}) ) {
+    $sub_redis_conn_timeout = $ENV{'ats_ssl_session_reuse__sub_redis_conn_timeout'};
+}
+
+$sub_redis_retrydelay = 5000000;
+if ( defined($ENV{'ats_ssl_session_reuse__sub_redis_retrydelay'}) ) {
+    $sub_redis_retrydelay = $ENV{'ats_ssl_session_reuse__sub_redis_retrydelay'};
+}
+
+$sub_redis_max_queue_messages = 10000;
+if ( defined($ENV{'ats_ssl_session_reuse__sub_redis_max_queue_messages'}) ) {
+    $sub_redis_max_queue_messages = $ENV{'ats_ssl_session_reuse__sub_redis_max_queue_messages'};
+}
+
+$sub_redis_colo_channel = $cluster_name.".*";
+
+print ("\n## start subconfig settings\n");
+print ("subconfig.SubNumWorkersPerEndpoint=$sub_worker_num_per_endpoint\n");
+print ("subconfig.SubRedisEndpoints=$redis_endpoints\n");
+print ("# in milliseconds\n");
+print ("subconfig.SubRedisConnectTimeout=$sub_redis_conn_timeout\n");
+print ("# in microseconds\n");
+print ("subconfig.SubRedisRetryDelay=$sub_redis_retrydelay\n");
+print ("subconfig.SubMaxQueuedMessages=$sub_redis_max_queue_messages\n");
+print ("subconfig.SubColoChannel=$sub_redis_colo_channel\n");
+print ("## end subconfig settings\n");
+
+$app_name = 'app';
+if ( defined($ENV{'ats_ssl_session_reuse__app_name'}) ) {
+    $app_name = $ENV{'ats_ssl_session_reuse__app_name'};
+}
+
+$key_type = 1;
+if ( defined($ENV{'ats_ssl_session_reuse__key_type'}) ) {
+    $key_type = $ENV{'ats_ssl_session_reuse__key_type'};
+}
+
+$key_version = 0;
+if ( defined($ENV{'ats_ssl_session_reuse__key_version'}) ) {
+    $key_version = $ENV{'ats_ssl_session_reuse__key_version'};
+}
+
+$key_update_interval = 25200;
+if ( defined($ENV{'ats_ssl_session_reuse__key_update_interval'}) ) {
+    $key_update_interval = $ENV{'ats_ssl_session_reuse__key_update_interval'};
+}
+
+$stek_master = 0;
+if ( defined($ENV{'ats_ssl_session_reuse__stek_master'}) ) {
+    $stek_master = $ENV{'ats_ssl_session_reuse__stek_master'};
+}
+
+$enable_sessionId_cache = 1;
+if ( defined($ENV{'ats_ssl_session_reuse__enable_sessionId_cache'}) ) {
+    $enable_sessionId_cache = $ENV{'ats_ssl_session_reuse__enable_sessionId_cache'};
+}
+
+$session_lifetime = 7200;
+if ( defined($ENV{'ats_ssl_session_reuse__session_lifetime'}) ) {
+    $session_lifetime = $ENV{'ats_ssl_session_reuse__session_lifetime'};
+}
+
+$enable_redis_store = '0';
+if ( defined($ENV{'ats_ssl_session_reuse__enable_redis_store'}) ) {
+    $enable_redis_store = $ENV{'ats_ssl_session_reuse__enable_redis_store'};
+}
+
+print ("\n#############################################################\n");
+print ("# This config file contains the starting values for the \n");
+print ("#  ATS plugin ats_ssl_session_reuse. \n");
+print ("#  Upon pkg install, settings may have been derived from yinst settings\n");
+print ("#############################################################\n");
+print ("## start ssl_session settings\n");
+print ("ssl_session.AppName=$app_name\n");
+print ("ssl_session.ClusterName=$cluster_name\n");
+print ("ssl_session.KeyType=$key_type\n");
+print ("ssl_session.KeyVersion=$key_version\n");
+print ("\n");
+print ("#############################################################\n");
+print ("# session-ticket-encryption-key (STEK) configs \n");
+print ("# KeyUpdateInterval (in seconds) \n");
+print ("#  Specifies frequency of STEK rotation in POD, if I am STEK Master\n");
+print ("#  maximum is 86400 (24 hours),  default is 25200 (7 hours)\n");
+print ("\n");
+print ("ssl_session.KeyUpdateInterval=$key_update_interval\n");
+print ("\n");
+print ("# STEKMaster= 1 (This instance will start as the STEK Master, initiating rotation)\n"); 
+print ("#          or 0 (start as STEK slave)\n");
+print ("ssl_session.STEKMaster=$stek_master\n");
+print ("\n");
+print ("#############################################################\n");
+print ("ssl_session.EnableSessionIdCache=$enable_sessionId_cache\n");
+print ("# SessioLifetime in seconds\n");
+print ("ssl_session.SessionLifetime=$session_lifetime\n");
+print ("\n");
+print ("ssl_session.EnableRedisStore=$enable_redis_store\n");
+print ("\n");
+print ("\n## end ssl_session settings\n");

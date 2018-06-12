@@ -1,0 +1,20 @@
+#!/bin/sh
+
+exec 2>&1
+cd /home/y || exit 1
+
+USER="$(user)"
+
+if [ -z "$USER" ]; then
+  USER="nobody"
+fi
+
+LOGDIR=/home/y/logs/trafficserver
+
+LOGCOUNT=100
+LOGLEN=16777215
+
+chown $USER:$USER $LOGDIR
+chmod 755 $LOGDIR
+
+exec setuidgid $USER bin/multilog n$LOGCOUNT s$LOGLEN $LOGDIR

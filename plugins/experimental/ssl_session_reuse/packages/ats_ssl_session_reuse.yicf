@@ -1,0 +1,100 @@
+#!/usr/local/bin/perl
+
+my $BIN_ROOT="\$ROOT/bin";
+if ($ENV{PLATFORM_MAJOR} eq "rhel.6.x")
+{
+    $BIN_ROOT="\$ROOT/bin64";
+}
+
+if ($ENV{PLATFORM_MAJOR} ne "rhel.7.x")
+{
+  # Revert after back-porting the latest hiredis
+  print "YINST requires pkg ports/hiredis\n"
+} else {
+  # newer 
+  print "YINST requires pkg ports/hiredis\n";
+  print "YINST requires pkg sys/yahoo-openssl-1.0.2 1.0.2m 1.0.99999\n";
+}
+
+
+print <<EOF
+
+PRODUCT_NAME = ats_ssl_session_reuse
+
+
+VERSION=`egrep '^[Vv]ersion[:]* ' ../README | head -1 | awk '{print \$2;}'`
+MAJOR=`echo \$VERSION | awk -F. '{print \$1}'`
+LONG_DESC=`cat \$(PRODUCT_NAME).LONG_DESC ../README`
+
+CUSTODIAN = ats-devel\@yahoo-inc.com http://twiki.corp.yahoo.com/view/Infrastructure/ApacheTrafficServer
+SHORT_DESC = ATS ssl session reuse plugin (session ticket and session ID).
+
+# assuming we are following the 5 digit version numbering...
+RELEASE_VERSION =`echo \$(VERSION) | cut -d'.' -f1-3`
+RELEASE_RANGE   = \$(RELEASE_VERSION).0.0 \$(RELEASE_VERSION).99999.99999
+
+## requried by yinst_create
+YINST bug-product ats
+YINST bug-component Plugins
+
+OWNER = nobody
+GROUP = nobody
+PERM = 0444
+
+SRCDIRS= ..
+SRCZIP = gitzip
+
+file 0444 - - libexec64/trafficserver/ats_ssl_plugin.so     ../ats_plugin/libats_ssl_plugin.so
+
+configfile 0644 - - conf/trafficserver/ats_ssl_session_reuse.xml ../conf/ats_ssl_session_reuse.conf.yin template overwrite
+
+# required pkgs
+YINST requires pkg trafficserver        \$(MAJOR).0.0    \$(MAJOR).9999.9999
+YINST requires pkg ats_generic_config   \$(MAJOR).0.0    \$(MAJOR).9999.9999
+YINST requires pkg ats_generic_config   0.3.25     *
+YINST requires pkg ycore                ROOT       ROOT_MAX
+YINST requires pkg ykeydb               ROOT       ROOT_MAX
+YINST requires pkg ysecure              ROOT       ROOT_MAX
+YINST requires pkg daemontools_y        0.78.39    0.9999.9999
+
+YINST pre-activate if [ -e \$ROOT/var/scoreboards/ssl_session_reuse.sbm ]; \\
+        then \\
+        rm -fv \$ROOT/var/scoreboards/ssl_session_reuse.sbm; \\
+        exit 0; \\
+        fi
+
+# HEY _YOU CANT PARK YOUR CAR HERE_  https://www.youtube.com/watch?v=t7_G9ZX3Ieo
+# you cannot call yinst in post-activate
+YINST post-activate  yinst set ats_generic_config.load_elevated=1
+
+YINST set autostart on
+YINST set user nobody
+YINST set pub_worker_num 5
+YINST set redis_endpoints localhost:6379
+YINST set pub_redis_conn_timeout 20000
+YINST set pub_redis_retrydelay 5000000
+YINST set pub_redis_publish_retries 3
+YINST set pub_redis_conn_retries 3
+YINST set cluster_name gq1
+YINST set pool_redis_conn_timeout 5
+YINST set get_session_timeout 20
+YINST set sub_worker_num_per_endpoint 5
+YINST set sub_redis_conn_timeout 20000
+YINST set sub_redis_retrydelay 5000000
+YINST set default_logger_name ssr
+YINST set app_name ycpi
+YINST set key_type 1
+YINST set key_version 0
+YINST set key_update_interval 25200
+YINST set stek_master 0
+YINST set enable_sessionId_cache 1
+YINST set session_lifetime 7200
+YINST set slowlog_threshold_time 1000
+YINST set enable_redis_store 0
+YINST set log_subscriber_filename /home/y/logs/trafficserver/ssl_session_reuse_subscriber.log
+YINST set log_filename /home/y/logs/trafficserver/ssl_session_reuse.log
+YINST set log_level info
+YINST set log_size 10485760 
+
+EOF
+;

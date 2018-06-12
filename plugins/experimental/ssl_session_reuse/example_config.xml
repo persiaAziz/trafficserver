@@ -1,0 +1,60 @@
+## start pub config settings
+pubconfig.PubNumWorkers=5
+pubconfig.PubRedisEndpoints=e1.ycpi.sja.yahoo.com,e2.ycpi.sja.yahoo.com
+# in milliseconds
+pubconfig.PubRedisConnectTimeout=20000
+# in microseconds
+pubconfig.PubRedisRetryDelay=5000000
+pubconfig.PubRedisPublishTries=3
+pubconfig.PubRedisConnectTries=3
+pubconfig.PubMaxQueuedMessages=10000
+pubconfig.PubColoChannelId=sja
+# in milliseconds
+pubconfig.PoolRedisConnectTimeout=5
+# in milliseconds
+pubconfig.GetSessionTimeout=20
+## end pub config settings
+
+## start subconfig settings
+subconfig.SubNumWorkersPerEndpoint=5
+subconfig.SubRedisEndpoints=abc.com,def.com
+# in milliseconds
+subconfig.SubRedisConnectTimeout=20000
+# in microseconds
+subconfig.SubRedisRetryDelay=5000000
+subconfig.SubMaxQueuedMessages=10000
+subconfig.SubColoChannel=sja.*
+## end subconfig settings
+
+#############################################################
+# This config file contains the starting values for the
+#  ATS plugin ats_ssl_session_reuse.
+#  Upon pkg install, settings may have been derived from yinst settings
+#############################################################
+## start ssl_session settings
+ssl_session.AppName=ycpi
+ssl_session.ClusterName=sja
+ssl_session.KeyType=1
+ssl_session.KeyVersion=0
+
+#############################################################
+# session-ticket-encryption-key (STEK) configs
+# KeyUpdateInterval (in seconds)
+#  Specifies frequency of STEK rotation in POD, if I am STEK Master
+#  maximum is 86400 (24 hours),  default is 25200 (7 hours)
+
+ssl_session.KeyUpdateInterval=25200
+
+# STEKMaster= 1 (This instance will start as the STEK Master, initiating rotation)
+#          or 0 (start as STEK slave)
+ssl_session.STEKMaster=0
+
+#############################################################
+ssl_session.EnableSessionIdCache=1
+# SessioLifetime in seconds
+ssl_session.SessionLifetime=7200
+
+ssl_session.EnableRedisStore=0
+ssl_session.redis_auth_key_file=/path/to/key/file
+
+## end ssl_session settings
